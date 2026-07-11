@@ -13,6 +13,8 @@
 
 Every enabled personal channel is complete through an evidenced watermark, represented once per source-qualified canonical item, searchable from one healthy brain, self-healing within bounded policy, and independently reachable by multiple MCP clients. New channels use one adapter contract and one installed configuration entry.
 
+The first-principles product and architecture target is specified in [`docs/NORTH_STAR_PERSONAL_ASSISTANT_BRAIN_2026-07-11.md`](docs/NORTH_STAR_PERSONAL_ASSISTANT_BRAIN_2026-07-11.md), with an evidence-first investigation worklog alongside it.
+
 ## Open-source posture
 
 The repository is designed to be public. `python -m gbrain_ops.privacy_scan .` fails on private absolute paths, likely credentials, email addresses outside synthetic fixtures, phone numbers, and tracked runtime/data directories. Real configuration belongs outside the checkout.
