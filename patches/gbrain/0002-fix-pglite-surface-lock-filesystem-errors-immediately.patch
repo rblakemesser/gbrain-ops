@@ -1,0 +1,66 @@
+From 731bf1819ad5e445c3778788d0f16f9ea3a2d8f5 Mon Sep 17 00:00:00 2001
+From: Blake Messer <rblakemesser@users.noreply.github.com>
+Date: Sat, 11 Jul 2026 09:49:33 -0500
+Subject: [PATCH] fix(pglite): surface lock filesystem errors immediately
+
+Do not retry read-only or permission failures as if another process held the PGLite lock. Include the lock path and filesystem code, while preserving EEXIST contention retries.
+---
+ src/core/pglite-lock.ts  | 11 +++++++++--
+ test/pglite-lock.test.ts | 17 ++++++++++++++++-
+ 2 files changed, 25 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/pglite-lock.ts b/src/core/pglite-lock.ts
+index 9b00bfe7..b8c9cc43 100644
+--- a/src/core/pglite-lock.ts
++++ b/src/core/pglite-lock.ts
+@@ -174,8 +174,15 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
+       const ownerToken = tokenOf({ pid: process.pid, acquired_at: now });
+       return { lockDir, acquired: true, lockPath, ownerToken, heartbeat: startHeartbeat(lockPath, ownerToken) };
+     } catch (e: unknown) {
+-      // mkdir failed — someone else grabbed it between our check and mkdir
+-      // This is fine, we'll retry
++      const code = e && typeof e === 'object' && 'code' in e ? String(e.code) : undefined;
++      if (code && ['EACCES', 'EPERM', 'EROFS', 'ENOTDIR'].includes(code)) {
++        throw new Error(
++          `GBrain: Cannot create PGLite lock at ${lockDir} (${code}). ` +
++          `Check that the database directory is writable; this is a filesystem error, not lock contention.`,
++          { cause: e },
++        );
++      }
++      // EEXIST means another process won the mkdir race; retry until timeout.
+       if (Date.now() - startTime >= timeoutMs) {
+         // Timeout — report which process holds the lock
+         const lockPath = join(lockDir, LOCK_FILE);
+diff --git a/test/pglite-lock.test.ts b/test/pglite-lock.test.ts
+index 5d2f472b..f3a141a9 100644
+--- a/test/pglite-lock.test.ts
++++ b/test/pglite-lock.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+-import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
++import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync, chmodSync } from 'fs';
+ import { join } from 'path';
+ import { tmpdir } from 'os';
+ import { acquireLock, releaseLock, type LockHandle } from '../src/core/pglite-lock';
+@@ -38,6 +38,21 @@ describe('pglite-lock', () => {
+     expect(existsSync(join(missingDataDir, '.gbrain-lock'))).toBe(false);
+   });
+ 
++  test('fails immediately when the lock directory cannot be created', async () => {
++    const readOnlyDataDir = join(TEST_DIR, 'sealed-data-dir');
++    mkdirSync(readOnlyDataDir);
++    chmodSync(readOnlyDataDir, 0o555);
++    const startedAt = Date.now();
++    try {
++      await expect(acquireLock(readOnlyDataDir, { timeoutMs: 5_000 })).rejects.toThrow(
++        /Cannot create PGLite lock.*filesystem error, not lock contention/,
++      );
++      expect(Date.now() - startedAt).toBeLessThan(1_000);
++    } finally {
++      chmodSync(readOnlyDataDir, 0o755);
++    }
++  });
++
+   test('prevents concurrent lock acquisition', async () => {
+     const lock1 = await acquireLock(TEST_DIR, { timeoutMs: 2000 });
+     expect(lock1.acquired).toBe(true);

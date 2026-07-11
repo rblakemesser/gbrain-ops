@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gbrain-ops/config/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["vendor", "runtime", "service", "sources"],
+  "properties": {
+    "vendor": {"type": "object", "additionalProperties": false, "required": ["repo", "upstream", "branch"], "properties": {"repo": {"type": "string", "minLength": 1}, "upstream": {"type": "string", "format": "uri"}, "branch": {"type": "string", "minLength": 1}}},
+    "runtime": {"type": "object", "additionalProperties": false, "required": ["state_dir", "archive_dir", "receipt_dir"], "properties": {"state_dir": {"type": "string", "minLength": 1}, "archive_dir": {"type": "string", "minLength": 1}, "receipt_dir": {"type": "string", "minLength": 1}}},
+    "service": {"type": "object", "additionalProperties": false, "required": ["bind", "port"], "properties": {"bind": {"type": "string", "enum": ["127.0.0.1", "::1"]}, "port": {"type": "integer", "minimum": 1024, "maximum": 65535}}},
+    "sources": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["id", "kind", "interval_seconds", "command_argv"], "properties": {"id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"}, "kind": {"type": "string", "minLength": 1}, "interval_seconds": {"type": "integer", "minimum": 60}, "command_argv": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "archive_roots": {"type": "array", "items": {"type": "string", "minLength": 1}}}}}
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gbrain-ops/collector-result/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_id", "status", "started_at", "finished_at", "accepted", "duplicates", "rejected"],
+  "properties": {
+    "schema": {"const": "gbrain-ops/collector-result/v1"},
+    "source_id": {"type": "string"},
+    "status": {"enum": ["success", "partial", "failed"]},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "accepted": {"type": "integer", "minimum": 0},
+    "duplicates": {"type": "integer", "minimum": 0},
+    "rejected": {"type": "integer", "minimum": 0},
+    "error_code": {"type": ["string", "null"]}
+  }
+}

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gbrain-ops"
+version = "0.1.0"
+description = "Open-sourceable operations control plane for a vendor GBrain checkout"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Blake Messer"}]
+dependencies = ["jsonschema>=4.23"]
+
+[project.optional-dependencies]
+google = ["google-api-python-client>=2", "google-auth>=2"]
+telegram = ["telethon>=1.40", "beautifulsoup4>=4.12"]
+dev = ["pytest>=8", "ruff>=0.6", "beautifulsoup4>=4.12"]
+
+[project.scripts]
+gbrain-ops = "gbrain_ops.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gbrain_ops"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "adapters"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gbrain-ops/source-inventory/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_id", "root", "items", "digest"],
+  "properties": {
+    "schema": {"const": "gbrain-ops/source-inventory/v1"},
+    "source_id": {"type": "string"},
+    "root": {"type": "string", "pattern": "^[^/]"},
+    "items": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "size", "sha256"], "properties": {"path": {"type": "string", "pattern": "^[^/]"}, "size": {"type": "integer", "minimum": 0}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}},
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

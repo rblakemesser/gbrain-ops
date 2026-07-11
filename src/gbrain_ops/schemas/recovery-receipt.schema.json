@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gbrain-ops/recovery-receipt/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "status", "source_digests", "imported", "replayed", "blockers"],
+  "properties": {
+    "schema": {"const": "gbrain-ops/recovery-receipt/v1"},
+    "status": {"enum": ["ready", "blocked"]},
+    "source_digests": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+    "imported": {"type": "integer", "minimum": 0},
+    "replayed": {"type": "integer", "minimum": 0},
+    "blockers": {"type": "array", "items": {"type": "string"}}
+  }
+}

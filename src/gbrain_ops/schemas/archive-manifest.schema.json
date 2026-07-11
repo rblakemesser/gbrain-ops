@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gbrain-ops/archive-manifest/v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "source_id", "inventory_digest", "accepted_paths"],
+  "properties": {
+    "schema": {"const": "gbrain-ops/archive-manifest/v1"},
+    "source_id": {"type": "string"},
+    "inventory_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "accepted_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[^/]"}}
+  }
+}

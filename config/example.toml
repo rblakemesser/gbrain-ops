@@ -1,0 +1,48 @@
+[vendor]
+repo = "${GBRAIN_VENDOR_CHECKOUT}"
+upstream = "https://github.com/garrytan/gbrain.git"
+branch = "master"
+
+[runtime]
+state_dir = "${GBRAIN_OPS_STATE_ROOT}"
+archive_dir = "${GBRAIN_OPS_ARCHIVE_ROOT}"
+receipt_dir = "${GBRAIN_OPS_RECEIPT_ROOT}"
+
+[service]
+bind = "127.0.0.1"
+port = 3100
+
+[[sources]]
+id = "mail"
+kind = "gmail"
+interval_seconds = 900
+command_argv = ["${PYTHON}", "${GBRAIN_OPS_REPO}/adapters/gmail/email_collector.py", "recent", "--days", "2"]
+archive_roots = ["${GBRAIN_GMAIL_ARCHIVE}"]
+
+[[sources]]
+id = "calendar"
+kind = "google-calendar"
+interval_seconds = 900
+command_argv = ["${PYTHON}", "${GBRAIN_OPS_REPO}/adapters/calendar/calendar_collector.py", "backfill"]
+archive_roots = ["${GBRAIN_CALENDAR_ARCHIVE}"]
+
+[[sources]]
+id = "messages"
+kind = "apple-messages"
+interval_seconds = 900
+command_argv = ["${PYTHON}", "${GBRAIN_OPS_REPO}/adapters/messages/messages_collector.py", "recent", "--days", "7"]
+archive_roots = ["${GBRAIN_MESSAGES_ARCHIVE}"]
+
+[[sources]]
+id = "meetings"
+kind = "granola"
+interval_seconds = 900
+command_argv = ["${PYTHON}", "${GBRAIN_OPS_REPO}/adapters/granola/granola_collector.py", "recent", "--days", "3"]
+archive_roots = ["${GBRAIN_GRANOLA_ARCHIVE}"]
+
+[[sources]]
+id = "telegram"
+kind = "telegram-mtproto"
+interval_seconds = 600
+command_argv = ["${PYTHON}", "${GBRAIN_OPS_REPO}/adapters/telegram/telegram_collector.py", "sync", "--mode", "recent"]
+archive_roots = ["${GBRAIN_TELEGRAM_ARCHIVE}"]

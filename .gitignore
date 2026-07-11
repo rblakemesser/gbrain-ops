@@ -1,0 +1,27 @@
+# Runtime/private state
+.env
+runtime.env
+config/local.*
+private/
+state/
+data/
+brain/
+logs/
+*.session
+*.session-journal
+*.token
+*.key
+*.pem
+
+# Python/tooling
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.py[cod]
+.DS_Store
+
+# Vendor checkouts and generated patches
+.vendor/
+build/
+dist/
