@@ -310,10 +310,12 @@ Hard privacy, integrity, source-isolation, retrieval-mode, freshness, and restor
 
 - Corpus: 10,285 pages and 28,165 chunks.
 - All chunks currently report embeddings and zero stale chunks.
-- Plain lexical search is not reliably returning expected results.
+- Plain lexical search is not reliably returning expected results on the active replacement.
 - One hybrid query passed during acceptance but later repetition was inconsistent.
 - A long PGLite/WASM maintenance process became CPU-bound without durable file progress and required external termination.
 - Current collectors are independent database writers; schedule staggering reduces but does not eliminate overlap risk.
+- The isolated 30-page, three-source unique-nonce oracle passed all 240 idle raw-FTS and keyword-only CLI positive/negative probes across cold and warm reopen cycles.
+- With one controlled GBrain writer holding the same isolated PGLite store, all 30 parallel CLI reads exceeded the four-second deadline; all sampled reads recovered immediately after the writer exited cleanly.
 
 ### Assumptions to test
 
@@ -343,9 +345,9 @@ Hard privacy, integrity, source-isolation, retrieval-mode, freshness, and restor
 
 | Rank | Hypothesis | Current confidence | Fastest falsifier |
 | ---: | --- | ---: | --- |
-| 1 | Recovery replay did not rebuild all lexical/search invariants, so stored and embedded content is not reliably retrievable. | 0.90 | Trace 20 known evidence items through envelope → canonical row → chunk → lexical vector → lexical/vector/hybrid result. |
-| 2 | PGLite/WASM is the wrong production ownership boundary for interruptible long-running jobs and multi-client availability. | 0.85 | Replay the same fixed sample into local native PostgreSQL and compare kill behavior, indexing, and retrieval under identical workload. |
-| 3 | Direct-writer collectors are the structural cause of lock fragility; time staggering only masks it. | 0.95 | Run concurrent collector/query chaos against a single-owner queue and against direct writers; compare lock errors and read availability. |
+| 1 | Recovery replay or current-generation state did not preserve all lexical/search invariants, so the active corpus is not reliably retrievable even though a fresh isolated corpus is. | 0.85 | Trace known active-corpus evidence through envelope → canonical row → chunk → lexical vector → lexical/vector/hybrid result. |
+| 2 | PGLite/WASM is the wrong production ownership boundary for interruptible long-running jobs and multi-client availability. | 0.95 | Run the backend-plus-owner bake-off; retain PGLite only if steward mode passes every liveness invariant. |
+| 3 | Direct-writer collectors structurally block concurrent CLI readers; time staggering only masks the ownership defect. | 1.00 measured | The isolated writer-held oracle reproduced 30/30 bounded read failures and immediate post-release recovery. |
 | 4 | Current acceptance gates optimize implementation counts rather than personal-question utility. | 0.95 | Evaluate both current and candidate generations on a private evidence-labeled question set. |
 | 5 | Status and receipts lack a canonical state machine, causing stale or contradictory operational claims. | 0.90 | Compare every current status artifact with independent process, database, index, and query probes. |
 | 6 | A small local-first evidence model plus evaluated retrieval will deliver more utility than additional graph/agent complexity. | 0.70 | Disable optional enrichment and compare answer quality/cost on the same evaluation set. |
@@ -369,6 +371,8 @@ Run one highest-information bet at a time. Freeze each fixture and decision rule
 - Both modes pass deterministically: current corpus/replacement state is the primary suspect.
 
 **Time budget:** 60 minutes. Do not tune hybrid ranking or start a storage migration first.
+
+**Measured result:** Decision reached. All 240 idle raw-FTS and keyword-only CLI positive/negative probes passed across cold and warm reopen cycles. Under one controlled writer, 30/30 bounded CLI reads timed out and sampled reads recovered after clean owner release. This falsifies a generic fresh-schema/CLI keyword defect and confirms the direct multi-process ownership/isolation defect. It does not clear the active replacement corpus; Bet 2 now owns that question.
 
 ### Bet 2 — Evidence-to-answer retrieval trace
 

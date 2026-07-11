@@ -81,3 +81,61 @@ The independent analyses agreed on the central model: durable evidence and prove
 ### Conclusion
 
 The North Star remains stable. The next move became narrower and higher-information: prove whether keyword failure exists in an isolated deterministic fixture before tracing the full personal corpus or committing to PostgreSQL.
+
+## 2026-07-11 — Bet 1: isolated unique-nonce keyword oracle
+
+### What changed
+
+- Added reusable `scripts/run_keyword_oracle.py` and deterministic unit coverage.
+- Froze 30 synthetic pages across three source-qualified fixtures.
+- Reused the same ten slugs across all three sources to test source isolation while assigning one unique nonce to every page.
+- Forced `search.mcp_keyword_only=true` so the CLI could not silently substitute vector or hybrid retrieval.
+- Added raw SQL FTS, CLI positive/negative, cold/warm reopen, controlled-writer, and post-writer recovery probes.
+- Kept all fixture content and PGLite state in an isolated `GBRAIN_HOME`; the active personal generation was not opened by the oracle.
+
+### Invalid pilot
+
+The first pilot receipt is retained as invalid evidence. Its raw SQL query referenced a nonexistent `sources.status` column, so all raw probes failed before testing retrieval. The harness was corrected to use the actual `sources.archived_at` visibility field and rerun in a fresh isolated generation. No conclusion uses the invalid pilot.
+
+### Valid artifact
+
+```text
+$HOME/.gbrain/recovery/oracles/20260711T225811Z/receipt.json
+fixture manifest SHA-256: 67f0404de014a2387678b5eb4a8bbedf08ed8238e404c16f338d3fc19133d7db
+```
+
+### Raw measured results
+
+| Phase | Probes | Failures/timeouts | p50 | p95 |
+| --- | ---: | ---: | ---: | ---: |
+| Raw FTS cold, positive + wrong-source negative | 60 | 0 | 118 ms | 129 ms |
+| Raw FTS warm reopen, positive + wrong-source negative | 60 | 0 | 118 ms | 132 ms |
+| CLI keyword-only cold, positive + wrong-source negative | 60 | 0 | 526.5 ms | 549 ms |
+| CLI keyword-only warm reopen, positive + wrong-source negative | 60 | 0 | 525 ms | 541 ms |
+| CLI while one controlled writer owned PGLite | 30 | 30 bounded timeouts | 4,016 ms | 4,036 ms |
+| CLI after the controlled writer exited cleanly | 3 | 0 | 530 ms | 530 ms |
+
+The isolated generation contained exactly 30 pages and 30 chunks. The controlled owner acquired the GBrain lock, performed one harmless config mutation, and exited `0`. Every bounded external CLI reader failed while ownership was held; sampled readers immediately succeeded after owner release.
+
+The active personal generation was independently rechecked afterward and retained its prior identity and counts: 10,285 pages, 28,165 chunks, and 28,165 embeddings.
+
+### Decision
+
+```text
+classification = ownership_or_isolation_defect
+```
+
+Bet 1 falsifies a generic fresh-schema, FTS-trigger, and keyword-only CLI defect. It confirms that the current direct multi-process topology cannot provide concurrent reads while a GBrain writer owns PGLite. Schedule staggering reduces collision probability but cannot satisfy the North Star read-availability contract.
+
+Bet 1 does **not** explain why the active replacement corpus returns no expected results when no writer is present. That failure is now more likely current-generation replay/index/filter state than a universal keyword implementation defect.
+
+### Updated beliefs
+
+1. Direct-writer ownership is a measured structural defect, not merely a suspected lock risk.
+2. Fresh PGLite FTS and keyword-only CLI retrieval are deterministic for the synthetic corpus.
+3. The active replacement requires an evidence-to-answer trace before choosing repair versus rebuild.
+4. A single-owner service is required regardless of whether PGLite or PostgreSQL ultimately wins the backend bake-off.
+
+### Next decision rule
+
+Run **Bet 2 — Evidence-to-answer retrieval trace** against known active-corpus items. Stop at the first missing layer. Do not migrate storage yet: if canonical chunks lack lexical vectors, repair/rebuild the generation; if lexical rows exist but source-scoped retrieval misses, repair the query/filter path; if retrieval succeeds but answers fail, repair fusion and evidence composition.

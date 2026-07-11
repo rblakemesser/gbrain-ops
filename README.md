@@ -28,6 +28,7 @@ The repository is designed to be public. `python -m gbrain_ops.privacy_scan .` f
 - Sync jobs execute argv without a shell and terminate their full process group on timeout.
 - launchd service definitions are rendered with `ProgramArguments`, never shell command strings.
 - The carried vendor patch series is recreated and tested from its pinned upstream commit in CI.
+- The isolated keyword oracle freezes synthetic source-qualified fixtures, probes raw FTS and CLI keyword retrieval, and classifies concurrent-writer isolation without touching the configured personal brain.
 
 The repository migration is complete, but promotion of a replacement production database remains a separate, receipt-gated operation. Repository tooling never bypasses a missing-source completeness blocker.
 
@@ -43,6 +44,9 @@ gbrain-ops vendor-promote --vendor "$GBRAIN_VENDOR_CHECKOUT" \
   --manifest patches/gbrain/manifest.json --output "$GBRAIN_VENDOR_RUNTIME"
 gbrain-ops activate-runtime --runtime "$GBRAIN_VENDOR_RUNTIME" --bun "$GBRAIN_BUN" \
   --wrapper "$GBRAIN_WRAPPER" --receipt "$GBRAIN_OPS_STATE_ROOT/active-vendor.json"
+python scripts/run_keyword_oracle.py \
+  --gbrain "$GBRAIN_WRAPPER" --bun "$GBRAIN_BUN" --runtime "$GBRAIN_VENDOR_RUNTIME" \
+  --artifact-dir "$GBRAIN_OPS_STATE_ROOT/oracles/$(date -u +%Y%m%dT%H%M%SZ)"
 gbrain-ops privacy-check .
 ```
 
