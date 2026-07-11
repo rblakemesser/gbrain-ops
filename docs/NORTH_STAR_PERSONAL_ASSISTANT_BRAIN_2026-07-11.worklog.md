@@ -59,4 +59,25 @@ The correct next move is not a broad rewrite. It is a 100-item evidence-to-answe
 
 ### Next-step recommendation
 
-Run **Bet 1 — Evidence-to-answer retrieval trace**. Do not begin the storage migration or owner-service build until the test identifies the first failing retrieval layer. After Bet 1, run the native PostgreSQL spike and the private personal-question evaluation harness before freezing a delivery architecture.
+Run **Bet 1 — Isolated unique-nonce keyword oracle** before the broader evidence-to-answer trace. Do not begin the storage migration or owner-service build until the isolated oracle distinguishes index/query failure from ownership or current-corpus effects. After that, run the real-item trace, then the combined backend and writer-ownership bake-off before freezing a delivery architecture.
+
+## 2026-07-11 — Independent North Star reconciliation
+
+### What changed
+
+Three independent analyses reviewed the first-principles architecture, quantitative scoreboard, and current failure map. Their non-duplicative findings were incorporated into the controller:
+
+- memory is explicitly governed forgetting, correction, and deletion;
+- scoreboard values are labeled measured, derived, assumed, or unknown;
+- hard gates cannot be averaged away by a quality score;
+- personal utility now includes opportunity completion, time saved, correction burden, usefulness, and proactive precision;
+- the first bet is now a 60-minute isolated unique-nonce keyword oracle;
+- the backend spike now compares both storage engines and direct-writer versus single-owner topology.
+
+### Raw result
+
+The independent analyses agreed on the central model: durable evidence and provenance are the product foundation; indexes are disposable generations; retrieval is the acceptance contract; and direct writers plus a PGLite/WASM production boundary are hypotheses to test rather than assumptions to preserve.
+
+### Conclusion
+
+The North Star remains stable. The next move became narrower and higher-information: prove whether keyword failure exists in an isolated deterministic fixture before tracing the full personal corpus or committing to PostgreSQL.

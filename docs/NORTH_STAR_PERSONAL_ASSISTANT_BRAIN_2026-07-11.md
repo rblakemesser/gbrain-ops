@@ -36,6 +36,7 @@ The system should reliably answer five classes of personal-assistant questions:
 8. **Graceful degradation is designed, not improvised.** If vector search fails, lexical and source browsing still work. If enrichment fails, raw evidence remains queryable.
 9. **Operations are state machines.** “Live” is never one boolean. Generation, evidence coverage, index health, freshness, and client reachability are independently measured.
 10. **Privacy is an egress policy.** Local storage is encrypted and access-controlled; every external model payload follows explicit minimization, provider, retention, and audit rules.
+11. **Memory is governed forgetting.** Raw evidence, durable assertions, preferences, working context, and summaries have different retention rules. Correction, supersession, decay, deletion, and user-directed forgetting are first-class operations.
 
 ## Scope
 
@@ -236,6 +237,17 @@ A generation is promotable only when required dimensions pass. Optional sources 
 
 Initial targets are product hypotheses until measured against real use.
 
+Every scoreboard value carries an evidence state:
+
+| State | Meaning | May satisfy a gate? |
+| --- | --- | ---: |
+| Measured (`M`) | Directly measured on the named generation with a timestamp and artifact | Yes |
+| Derived (`D`) | Reproducible formula whose inputs are all measured | Yes |
+| Assumed (`A`) | Proposed target or operating belief | No |
+| Unknown (`U`) | Missing, contradictory, intermittent, or stale evidence | No |
+
+Hard privacy, integrity, source-isolation, retrieval-mode, freshness, and restore gates must pass independently. Weighted quality scores are useful only after the hard gates pass; averages never conceal a failed safety or correctness contract.
+
 ### Trust and retrieval
 
 | Metric | Initial target | Measurement |
@@ -280,6 +292,17 @@ Initial targets are product hypotheses until measured against real use.
 | External calls with provenance receipt | 100% | Provider-call ledger |
 | Secrets or private text in public/log artifacts | 0 | Automated scanners + review |
 | Assumed monthly model budget | ≤ $30 until utility is proven | Cost ledger; product decision, not a hard invariant |
+
+### Personal utility
+
+| Metric | Initial target | Measurement |
+| --- | ---: | --- |
+| Eligible opportunity completion | ≥ 80% | Pre-registered 14-day personal-use trial |
+| Median time saved | ≥ 50% versus manual baseline | Paired opportunity timing |
+| User-rated usefulness | Median ≥ 4/5; ≥ 80% rated 4–5 | Post-opportunity rating |
+| Material correction burden | ≤ 15% of completed opportunities | Correction ledger |
+| Useful proactive interventions | ≥ 80%; ≤ 1 nuisance/day | Pre-registered intervention trial |
+| High-severity harmful action or missed critical commitment | 0 | Continuous incident review |
 
 ## Quant model and sanity checks
 
@@ -329,11 +352,27 @@ Initial targets are product hypotheses until measured against real use.
 
 ## First iteration plan
 
-Run one highest-information bet at a time.
+Run one highest-information bet at a time. Freeze each fixture and decision rule before executing it.
 
-### Bet 1 — Evidence-to-answer retrieval trace
+### Bet 1 — Isolated unique-nonce keyword oracle
 
-**Question:** Is current retrieval failure caused by missing index material, filtering/routing, or answer-layer behavior?
+**Question:** Is keyword failure inside the index/query path, or does it require the current corpus and writer topology?
+
+**Brutal test:** Create 30 synthetic, source-qualified pages containing unique exact tokens, known source collisions, and known tags. With no background writer, run each token cold and warm through raw database FTS and CLI keyword-only search. Then repeat with one controlled writer.
+
+**Pre-committed decision rule:**
+
+- Any miss, timeout, cross-source result, nondeterministic repeat, or silent semantic/hybrid substitution fails the candidate.
+- Raw FTS passes but CLI fails: query adapter/filter defect.
+- Raw FTS fails while canonical/chunk rows exist: schema/index/migration defect.
+- Idle passes but controlled-writer mode fails: ownership/isolation defect.
+- Both modes pass deterministically: current corpus/replacement state is the primary suspect.
+
+**Time budget:** 60 minutes. Do not tune hybrid ranking or start a storage migration first.
+
+### Bet 2 — Evidence-to-answer retrieval trace
+
+**Question:** Where does a real known item first disappear between source evidence and an answer?
 
 **Brutal test:** Select 20 known items per enabled source plus 20 known-absent controls. For each known item, trace:
 
@@ -356,42 +395,48 @@ archive envelope
 - Canonical/chunk exists but lexical row is absent: index-build defect.
 - Index row exists but lexical lookup misses: query/filter defect.
 - Lexical/vector retrieval works but answer fails: fusion/answer-contract defect.
-- More than 5% known-item miss rate blocks all further architecture promotion work.
+- More than 5% known-item miss rate blocks architecture promotion.
 
-**Time budget:** 4 hours to build the oracle and identify the first failing layer.
+**Time budget:** 4 hours after Bet 1 identifies the failing mode.
 
-### Bet 2 — Native PostgreSQL production-boundary spike
+### Bet 3 — Backend and writer-ownership bake-off
 
-**Question:** Does moving the owner boundary to native PostgreSQL remove the maintenance and concurrency failure class without sacrificing local-first operation?
+**Question:** Must we replace only orchestration, or both orchestration and the PGLite/WASM storage boundary?
 
-**Brutal test:** Replay a fixed, non-private synthetic corpus plus a local hashed sample into PGLite and native PostgreSQL. Run identical ingestion, lexical/vector build, concurrent reads, SIGTERM/SIGKILL, restart, and rollback tests.
+**Brutal test:** Replay the same fixed sample into PGLite and local native PostgreSQL. Under each backend, compare direct-writer bursts with a thin single-owner queue. Exercise lexical/vector build, concurrent reads, provider failure, timeout, `SIGTERM`, `SIGKILL`, restart, unchanged replay, and rollback.
 
-**Pre-committed decision rule:** Adopt native PostgreSQL as the target owner if it:
+**Required invariants:**
 
-- preserves replay equality;
-- passes lexical/vector retrieval invariants;
-- keeps reads available during rebuild;
-- terminates bounded jobs within 10 seconds or survives external kill without corruption;
-- restores service within 10 minutes;
-- stays within 2× the current warm-query latency at this scale.
+- exact replay equality and zero unrelated mutation;
+- exactly one mutable owner in steward mode;
+- lexical and hybrid retrieval pass independently;
+- failed embeddings remain explicitly stale and produce non-success;
+- progress uses a frozen manifest and never exceeds 100%;
+- bounded jobs terminate within 10 seconds or survive hard kill without corruption;
+- restart converges without lock surgery;
+- reads remain available from the prior accepted generation;
+- rollback restores service within 10 minutes;
+- warm-query latency stays within 2× the current baseline.
 
-**Time budget:** 1 day after Bet 1 localizes retrieval.
+**Pre-committed decision rule:**
 
-### Bet 3 — Private personal-question evaluation harness
+- Steward mode passes on PGLite: replace direct-writer orchestration and retain the engine provisionally.
+- Steward mode still wedges on PGLite while PostgreSQL passes: standardize native PostgreSQL rather than building more PGLite recovery machinery.
+- Both backends fail identically: importer, retrieval, configuration, or receipt contracts are primary.
 
-**Question:** Does the architecture answer the questions that matter rather than merely indexing content?
+**Time budget:** 1 day after Bet 2.
 
-**Brutal test:** Create a private, evidence-labeled, source-stratified diagnostic set of 60 questions: 10 each for events, people/facts, commitments, preferences, conflicts/updates, and intentionally unanswerable questions. Expand to at least 300 after the harness proves useful.
+### Evaluation harness required for promotion
 
-**Pre-committed decision rule:** No generation is promoted unless the diagnostic set reaches:
+Create a private, evidence-labeled, source-stratified diagnostic set of 60 questions: 10 each for events, people/facts, commitments, preferences, conflicts/updates, and intentionally unanswerable questions. Expand to at least 300 after the harness proves useful.
+
+No generation is promoted unless the diagnostic set reaches:
 
 - ≥ 95% evidence recall@10;
 - ≥ 95% evidence precision@5;
 - 100% citation presence for material assertions;
 - ≥ 95% correct abstention in the bootstrap set;
 - no regression greater than 2 percentage points versus the accepted generation.
-
-**Time budget:** 1 day for the first 60-question harness after Bet 1.
 
 ## Decisions deferred until evidence
 
@@ -405,9 +450,10 @@ archive envelope
 
 The investigation can become a fixed architecture delivery plan when:
 
-1. Bet 1 identifies and proves the current first failing retrieval layer.
-2. The storage/owner spike settles the PGLite-versus-native boundary.
-3. The private evaluation harness can distinguish a good generation from a broken one.
-4. The target state can be decomposed into independently provable delivery phases without unresolved ownership or truth-model questions.
+1. Bet 1 classifies keyword failure as index/query, ownership, or current-corpus specific.
+2. Bet 2 identifies and proves the first failing evidence-to-answer layer.
+3. Bet 3 settles both the production backend and mutation-owner boundary.
+4. The private evaluation harness can distinguish a good generation from a broken one.
+5. The target state can be decomposed into independently provable delivery phases without unresolved ownership or truth-model questions.
 
 At that point, route to an architecture epic with ordered sub-plans for evidence ledger, single-owner service, retrieval generation/evaluation, client migration, and recovery/operations.
