@@ -1,9 +1,9 @@
 ---
 title: "GBrain - Operational Acceptance and Promotion"
 date: 2026-07-12
-status: active
+status: complete
 implementation_status: complete
-verification_status: pending
+verification_status: passed
 fallback_policy: forbidden
 owners: [Blake Messer]
 reviewers: [Arch Epic critic]
@@ -24,9 +24,9 @@ Promote the acknowledged-ingestion, one-owner, provenance-first brain only after
 - [x] Missing evidence yields explicit abstention; owner failures propagate as operational failures.
 - [x] Owner restart preserves brain identity and evidence provenance.
 - [x] Python tests, Ruff, shell syntax, compilation, privacy scan, Gitleaks, runtime typecheck/check gates, and focused owner/auth tests pass.
-- [ ] Repair critics approve the final retrieval implementation.
-- [ ] Hosted CI passes the committed sanitized tree.
-- [ ] Sanitized commit is pushed to the public repository.
+- [x] Repair critics approve the final retrieval implementation.
+- [x] Hosted CI passes the committed sanitized tree.
+- [x] Sanitized commit is pushed to the public repository.
 
 # Rollback
 

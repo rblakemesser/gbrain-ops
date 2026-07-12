@@ -2,7 +2,7 @@
 title: Epic — Make the local personal-assistant brain operational end to end
 date: 2026-07-11
 doc_type: epic
-status: active
+status: complete
 raw_goal: |-
   Ok but clearly the point is to get the system working, please execute through arch flow to completion
 raw_goal_sha256: 3855e86da13fc9d33f6fb1041397c92bc2e8f9319d63e3d10f3d40291c81d7c4
@@ -36,13 +36,13 @@ Make the replacement personal brain actually answer ordinary evidence-backed que
    - DOC_PATH: docs/epic/OPERATIONAL_PERSONAL_ASSISTANT_BRAIN_2026-07-11/PHASE_03_PERSONAL_QUESTION_RETRIEVAL_2026-07-12.md
    - Gate to next: The system retrieves the last two days of the intended family conversation and the most recent prior similar discussion with source/time provenance, correct temporal ordering, and explicit gaps.
    - Status: implemented + verified
-   - Epic-critic verdict: —
+   - Epic-critic verdict: APPROVE
 
 4. **Prove, harden, and promote the operational brain**: Exercise freshness, retrieval, writer ownership, restart, rollback, privacy, and answer-quality gates; promote the verified configuration and retire stale direct-open paths and misleading receipts.
    - DOC_PATH: docs/epic/OPERATIONAL_PERSONAL_ASSISTANT_BRAIN_2026-07-11/PHASE_04_OPERATIONAL_ACCEPTANCE_2026-07-11.md
    - Gate to next: (last sub-plan)
-   - Status: implemented; final critic/hosted-CI/publication gate pending
-   - Epic-critic verdict: —
+   - Status: implemented + verified
+   - Epic-critic verdict: APPROVE
 
 # Orchestration Log
 
@@ -56,6 +56,7 @@ Make the replacement personal brain actually answer ordinary evidence-backed que
 - 2026-07-12 Phase 02 passed live: all four enabled collectors use source-bound owner reconciliation, Hermes has a 26-tool read-only MCP registration, all four schedules and the owner watchdog passed manual runs, and restart preserved one holder plus the same brain identity.
 - 2026-07-12 Phase 03 passed live through the final Hermes identity: July 10 and July 11 canonical relationship evidence was present, July 8 was the latest earlier qualified match, provenance was stable, and the packet was explicitly answerable with zero gaps.
 - 2026-07-12 Promoted and activated release-v5 with read-only legacy bearer scopes and explicit Messages/Gmail/Calendar/Granola source grants; authenticated Messages read passed and write was denied.
+- 2026-07-12 Final retrieval specification critic returned `APPROVE`; security/code-quality critic also returned `APPROVE`. The exact Hermes evidence composition passed, all 74 tests and repository-wide lint passed, and hosted Ops/vendor CI passed.
 
 # Decision Log
 
