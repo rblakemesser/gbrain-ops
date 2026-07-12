@@ -1,7 +1,7 @@
 ---
 title: "GBrain - Local PostgreSQL Cutover - Architecture Plan"
 date: 2026-07-12
-status: implemented_pending_publication
+status: completed
 fallback_policy: forbidden
 owners: [Blake Messer]
 reviewers: [Hermes]
@@ -16,7 +16,7 @@ related:
 - **Outcome:** The active GBrain serving store moved from local PGLite/WASM to a dedicated local native PostgreSQL instance with pgvector while preserving the authenticated single-owner API and accepted personal retrieval behavior.
 - **Problem:** PGLite was healthy only behind strict one-holder supervision and had exhibited lock, checkpoint, and uninterruptible WASM maintenance failure modes. The broader off-laptop architecture also requires a Postgres-compatible serving boundary.
 - **Approach:** An isolated PostgreSQL cluster was provisioned without touching Blake's existing PostgreSQL 15 databases; source-qualified pages and embeddings were migrated side by side, exact parity and recovery were proven, and the owner was atomically restarted against PostgreSQL.
-- **Plan:** Completed: provision → migrate → parity/recovery tests → owner cutover → collector/Hermes acceptance. Remaining frontier: publish sanitized operations changes.
+- **Plan:** Completed: provision → migrate → parity/recovery tests → owner cutover → collector/Hermes acceptance → sanitized operations publication.
 - **Non-negotiables:** No destructive PGLite operation; no direct collector DB access; no secrets in Git/logs; no cutover without content, retrieval, ebook, least-privilege, restart, backup, and rollback evidence.
 
 ## Implementation status — 2026-07-12
@@ -27,6 +27,8 @@ related:
 - Explicit reset policy: 22 PGLite `query_cache` rows were intentionally invalidated because they are backend-specific derived state keyed to pre-migration generations/IDs. Empty locks, leases, reservations, jobs, facts, takes, ontology, timeline, raw-data, link, alias, file, code-edge, and multimodal auxiliary tables required no row transfer.
 - Recovery: private custom-format PostgreSQL backup restored successfully to an isolated database; PGLite rollback and return-to-PostgreSQL completed in six seconds.
 - Clients: Hermes authorization/personal evidence passed; Gmail, Calendar, Messages, and Granola post-cutover sync jobs all completed successfully; watchdog exit is zero.
+- Publication: implementation commit `eadcb3f251cbf23729830f6cf052a942676e070e` is on `origin/main`; hosted CI and vendor compatibility passed in [run 29202912279](https://github.com/rblakemesser/gbrain-ops/actions/runs/29202912279), and GitHub signoff was recorded for that commit.
+- Review: manual specification/security/code review and CRG change-impact review found no blocker; CRG reported low risk (`0.30`) and no test gaps. A supplemental local Codex audit was attempted after upgrading the CLI, but the newest available CLI still rejected the configured `gpt-5.6-sol` model and therefore produced no verdict.
 
 <!-- arch_skill:block:planning_passes:start -->
 <!--
@@ -315,10 +317,10 @@ Adjacent surfaces classified: owner launcher, watchdog, collectors, Hermes, back
 **Checklist (must all be done):**
 - [x] Run ops pytest, Ruff, syntax checks, privacy scan, Gitleaks, diff check.
 - [x] Run relevant GBrain Postgres tests/typecheck.
-- [ ] Obtain specification and security/code-quality approval.
+- [x] Obtain specification and security/code-quality approval.
 - [x] Update this plan/worklog to implementation truth.
-- [ ] Commit and push sanitized changes.
-- [ ] Verify hosted CI and gh-signoff.
+- [x] Commit and push sanitized changes.
+- [x] Verify hosted CI and gh-signoff.
 
 **Verification (required proof):** Exact command results, critic verdicts, clean worktree, synchronized remote revision, successful CI/signoff.
 
