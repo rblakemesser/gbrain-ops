@@ -13,14 +13,22 @@ MAPPING = {
         "email_collector.py": "adapters/gmail/email_collector.py",
         "classify_archive.py": "adapters/gmail/classify_archive.py",
         "promote_archive.py": "adapters/gmail/promote_archive.py",
+        "run_fresh_sync.sh": "adapters/gmail/run_fresh_sync.sh",
     },
     "calendar-to-brain": {
         "calendar_collector.py": "adapters/calendar/calendar_collector.py",
         "classify_archive.py": "adapters/calendar/classify_archive.py",
         "promote_archive.py": "adapters/calendar/promote_archive.py",
+        "run_fresh_sync.sh": "adapters/calendar/run_fresh_sync.sh",
     },
-    "messages-to-brain": {"messages_collector.py": "adapters/messages/messages_collector.py"},
-    "granola-to-brain": {"granola_collector.py": "adapters/granola/granola_collector.py"},
+    "messages-to-brain": {
+        "messages_collector.py": "adapters/messages/messages_collector.py",
+        "run_fresh_sync.sh": "adapters/messages/run_fresh_sync.sh",
+    },
+    "granola-to-brain": {
+        "granola_collector.py": "adapters/granola/granola_collector.py",
+        "run_fresh_sync.sh": "adapters/granola/run_fresh_sync.sh",
+    },
     "telegram-to-brain": {
         "egress_policy.py": "adapters/telegram/egress_policy.py",
         "render_markdown.py": "adapters/telegram/render_markdown.py",

@@ -1,0 +1,216 @@
+From d31ce55e49837d70f8f82348958c01ac920d3e88 Mon Sep 17 00:00:00 2001
+From: GBrain Ops <person@example.test>
+Date: Sat, 11 Jul 2026 22:21:02 -0500
+Subject: [PATCH] feat(auth): scope legacy bearer tokens
+
+---
+ src/commands/auth.ts          | 31 ++++++++++++++++++++++---------
+ src/core/oauth-provider.ts    |  8 +++++++-
+ src/mcp/http-transport.ts     |  7 +++++--
+ test/auth-create-args.test.ts | 13 ++++++++++++-
+ test/oauth.test.ts            |  3 ++-
+ 5 files changed, 48 insertions(+), 14 deletions(-)
+
+diff --git a/src/commands/auth.ts b/src/commands/auth.ts
+index f568eec4..a7b4d2bc 100644
+--- a/src/commands/auth.ts
++++ b/src/commands/auth.ts
+@@ -66,8 +66,14 @@ async function withConfiguredSql<T>(
+   }
+ }
+ 
+-async function create(name: string, opts: { takesHolders?: string[] } = {}) {
+-  if (!name) { console.error('Usage: auth create <name> [--takes-holders world,garry]'); process.exit(1); }
++async function create(name: string, opts: { takesHolders?: string[]; scopes?: string[] } = {}) {
++  if (!name) { console.error('Usage: auth create <name> [--takes-holders world,garry] [--scopes read,write,admin]'); process.exit(1); }
++  const scopes = opts.scopes && opts.scopes.length > 0 ? opts.scopes : ['read', 'write', 'admin'];
++  const invalidScopes = scopes.filter(scope => !['read', 'write', 'admin'].includes(scope));
++  if (invalidScopes.length > 0) {
++    console.error(`Invalid scopes: ${invalidScopes.join(', ')} (allowed: read, write, admin)`);
++    process.exit(1);
++  }
+   const token = generateToken();
+   const hash = hashToken(token);
+ 
+@@ -78,7 +84,7 @@ async function create(name: string, opts: { takesHolders?: string[] } = {}) {
+       const takesHolders = opts.takesHolders && opts.takesHolders.length > 0
+         ? opts.takesHolders
+         : ['world'];
+-      const permissions = { takes_holders: takesHolders };
++      const permissions = { takes_holders: takesHolders, scopes };
+       // JSONB write: pass the object via executeRawJsonb with an explicit
+       // ::jsonb cast in the SQL string. Both engines round-trip the object
+       // through the wire-protocol type oid without the v0.12.0 double-encode
+@@ -91,7 +97,7 @@ async function create(name: string, opts: { takesHolders?: string[] } = {}) {
+         [name, hash],
+         [permissions],
+       );
+-      console.log(`Token created for "${name}" (takes_holders=${JSON.stringify(takesHolders)}):\n`);
++      console.log(`Token created for "${name}" (takes_holders=${JSON.stringify(takesHolders)}, scopes=${JSON.stringify(scopes)}):\n`);
+       console.log(`  ${token}\n`);
+       console.log('Save this token — it will not be shown again.');
+       console.log(`Revoke with: gbrain auth revoke "${name}"`);
+@@ -469,14 +475,19 @@ async function registerClient(name: string, args: string[]) {
+  * resolved to `rest[0]` when `takesIdx === -1`, silently dropping the name on
+  * the bare `gbrain auth create <name>` form.
+  */
+-export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolders?: string[] } {
++export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolders?: string[]; scopes?: string[] } {
+   const takesIdx = rest.indexOf('--takes-holders');
+   const takesHolders = takesIdx >= 0 && rest[takesIdx + 1]
+     ? rest[takesIdx + 1].split(',').map(s => s.trim()).filter(Boolean)
+     : undefined;
+   const takesValue = takesIdx >= 0 ? rest[takesIdx + 1] : undefined;
+-  const positional = rest.find(a => !a.startsWith('--') && a !== takesValue);
+-  return { name: positional || '', takesHolders };
++  const scopesIdx = rest.indexOf('--scopes');
++  const scopesValue = scopesIdx >= 0 ? rest[scopesIdx + 1] : undefined;
++  const scopes = scopesValue
++    ? scopesValue.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
++    : undefined;
++  const positional = rest.find(a => !a.startsWith('--') && a !== takesValue && a !== scopesValue);
++  return { name: positional || '', takesHolders, scopes };
+ }
+ 
+ export async function runAuth(args: string[]): Promise<void> {
+@@ -485,7 +496,7 @@ export async function runAuth(args: string[]): Promise<void> {
+     case 'create': {
+       // v0.28: optional --takes-holders world,garry,brain (default: world only)
+       const parsed = parseAuthCreateArgs(rest);
+-      await create(parsed.name, { takesHolders: parsed.takesHolders });
++      await create(parsed.name, { takesHolders: parsed.takesHolders, scopes: parsed.scopes });
+       return;
+     }
+     case 'list': await list(); return;
+@@ -508,11 +519,13 @@ export async function runAuth(args: string[]): Promise<void> {
+       console.log(`GBrain Token Management
+ 
+ Usage:
+-  gbrain auth create <name> [--takes-holders world,garry,brain]
++  gbrain auth create <name> [--takes-holders world,garry,brain] [--scopes read,write,admin]
+                                                           Create a legacy bearer token. v0.28: --takes-holders
+                                                           sets the per-token allow-list for the takes.holder
+                                                           field (default: ["world"]). MCP-bound calls to
+                                                           takes_list / takes_search / query filter by this.
++                                                          --scopes defaults to legacy full access; use
++                                                          --scopes read for least-privilege clients.
+   gbrain auth list                                         List all tokens
+   gbrain auth revoke <name>                                Revoke a legacy token
+   gbrain auth permissions <name> set-takes-holders <h1,h2,h3>
+diff --git a/src/core/oauth-provider.ts b/src/core/oauth-provider.ts
+index 52845ea1..9b034e2c 100644
+--- a/src/core/oauth-provider.ts
++++ b/src/core/oauth-provider.ts
+@@ -711,12 +711,18 @@ export class GBrainOAuthProvider implements OAuthServerProvider {
+       const sourceGrant = permissions && typeof permissions === 'object'
+         ? (permissions as Record<string, unknown>).source_id
+         : undefined;
++      const scopeGrant = permissions && typeof permissions === 'object'
++        ? (permissions as Record<string, unknown>).scopes
++        : undefined;
++      const scopes = Array.isArray(scopeGrant)
++        ? scopeGrant.filter((scope): scope is string => typeof scope === 'string' && ['read', 'write', 'admin'].includes(scope))
++        : ['read', 'write', 'admin'];
+       const { sourceId, allowedSources } = parseLegacyTokenScope(sourceGrant);
+       return {
+         token,
+         clientId: name,
+         clientName: name,
+-        scopes: ['read', 'write', 'admin'],
++        scopes,
+         expiresAt: Math.floor(Date.now() / 1000) + 365 * 24 * 3600, // Legacy tokens never expire — set 1yr future
+         // Legacy tokens without an explicit permissions.source_id grant keep
+         // the historical 'default' source floor. Array grants become
+diff --git a/src/mcp/http-transport.ts b/src/mcp/http-transport.ts
+index c3ff28c2..1706b943 100644
+--- a/src/mcp/http-transport.ts
++++ b/src/mcp/http-transport.ts
+@@ -206,17 +206,20 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
+         .catch(() => { /* fire-and-forget */ });
+       // v0.28: extract per-token takes-holder allow-list. Fail-safe default
+       // is ['world'] — a token with no permissions row sees public claims only.
+-      const perms = (row as { permissions?: { takes_holders?: unknown; source_id?: unknown } }).permissions;
++      const perms = (row as { permissions?: { takes_holders?: unknown; source_id?: unknown; scopes?: unknown } }).permissions;
+       const allowList = Array.isArray(perms?.takes_holders)
+         ? (perms!.takes_holders as unknown[]).filter(h => typeof h === 'string') as string[]
+         : ['world'];
+       // #1336: honor the operator-set source grant stored on the token.
+       const { sourceId, allowedSources } = parseLegacyTokenScope(perms?.source_id);
++      const scopes = Array.isArray(perms?.scopes)
++        ? perms.scopes.filter((scope): scope is string => typeof scope === 'string' && ['read', 'write', 'admin'].includes(scope))
++        : ['read', 'write', 'admin'];
+       const auth: AuthInfo = {
+         token,
+         clientId: rowId,
+         clientName: rowName,
+-        scopes: [],
++        scopes,
+         sourceId,
+         ...(allowedSources ? { allowedSources } : {}),
+       };
+diff --git a/test/auth-create-args.test.ts b/test/auth-create-args.test.ts
+index 3ce9e775..5e28150a 100644
+--- a/test/auth-create-args.test.ts
++++ b/test/auth-create-args.test.ts
+@@ -5,13 +5,14 @@ describe('parseAuthCreateArgs', () => {
+   test('bare name (no flag) resolves the name — regression for the dropped-name bug', () => {
+     // Pre-fix this returned name='' because rest[takesIdx+1] === rest[0] when
+     // takesIdx === -1, excluding the only positional from the search.
+-    expect(parseAuthCreateArgs(['claude-code'])).toEqual({ name: 'claude-code', takesHolders: undefined });
++    expect(parseAuthCreateArgs(['claude-code'])).toEqual({ name: 'claude-code', takesHolders: undefined, scopes: undefined });
+   });
+ 
+   test('name + --takes-holders', () => {
+     expect(parseAuthCreateArgs(['claude-code', '--takes-holders', 'world,garry'])).toEqual({
+       name: 'claude-code',
+       takesHolders: ['world', 'garry'],
++      scopes: undefined,
+     });
+   });
+ 
+@@ -19,6 +20,7 @@ describe('parseAuthCreateArgs', () => {
+     expect(parseAuthCreateArgs(['--takes-holders', 'world', 'claude-code'])).toEqual({
+       name: 'claude-code',
+       takesHolders: ['world'],
++      scopes: undefined,
+     });
+   });
+ 
+@@ -35,4 +37,13 @@ describe('parseAuthCreateArgs', () => {
+   test('takes-holders trims + drops empties', () => {
+     expect(parseAuthCreateArgs(['n', '--takes-holders', ' world , , garry ']).takesHolders).toEqual(['world', 'garry']);
+   });
++
++  test('scopes may be comma or whitespace separated and are not mistaken for the name', () => {
++    expect(parseAuthCreateArgs(['--scopes', 'read,write', 'reader'])).toEqual({
++      name: 'reader',
++      takesHolders: undefined,
++      scopes: ['read', 'write'],
++    });
++    expect(parseAuthCreateArgs(['reader', '--scopes', 'read write']).scopes).toEqual(['read', 'write']);
++  });
+ });
+diff --git a/test/oauth.test.ts b/test/oauth.test.ts
+index ee528edd..e474ef54 100644
+--- a/test/oauth.test.ts
++++ b/test/oauth.test.ts
+@@ -329,7 +329,7 @@ describe('verifyAccessToken', () => {
+         ${crypto.randomUUID()},
+         ${'legacy-federated-agent'},
+         ${hash},
+-        ${JSON.stringify({ source_id: ['default', 'src-a', 'src-b'] })}::jsonb
++        ${JSON.stringify({ source_id: ['default', 'src-a', 'src-b'], scopes: ['read'] })}::jsonb
+       )
+     `;
+ 
+@@ -337,6 +337,7 @@ describe('verifyAccessToken', () => {
+     expect(authInfo.clientId).toBe('legacy-federated-agent');
+     expect(authInfo.sourceId).toBe('default');
+     expect(authInfo.allowedSources).toEqual(['default', 'src-a', 'src-b']);
++    expect(authInfo.scopes).toEqual(['read']);
+   });
+ });
+ 
+-- 
+2.50.1 (Apple Git-155)
+

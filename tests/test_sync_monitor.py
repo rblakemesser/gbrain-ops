@@ -1,4 +1,3 @@
-import json
 from datetime import datetime, timezone, timedelta
 
 from sync_monitor import evaluate_jobs

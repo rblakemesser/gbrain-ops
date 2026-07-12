@@ -1,0 +1,271 @@
+From 821c1726bf5f9909938f31a31cd4925105ca3d28 Mon Sep 17 00:00:00 2001
+From: GBrain Ops <person@example.test>
+Date: Sat, 11 Jul 2026 19:26:56 -0500
+Subject: [PATCH] feat(ingestion): acknowledge persisted HTTP writes in owner
+
+---
+ src/commands/serve-http.ts                    | 54 +++++++++++++++++-
+ src/commands/serve.ts                         |  2 +-
+ src/core/ingestion/service.ts                 | 10 ++++
+ .../http-owner-vertical-slice.serial.test.ts  | 55 ++++++++++++++++++-
+ test/ingestion/service.test.ts                | 17 ++++++
+ test/serve-http-owner-lifecycle.test.ts       |  3 +
+ .../serve-http-startup-failure.serial.test.ts |  3 +
+ 7 files changed, 139 insertions(+), 5 deletions(-)
+
+diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
+index 7a2e7669..56d42709 100644
+--- a/src/commands/serve-http.ts
++++ b/src/commands/serve-http.ts
+@@ -410,8 +410,8 @@ export interface ServeHttpOptions {
+    * tracking the regenerated value through other means.
+    */
+   suppressBootstrapToken?: boolean;
+-  /** Optional owner-local ingestion health provider; lifecycle is owned by serve.ts. */
+-  ingestionService?: Pick<IngestionService, 'healthCheck'>;
++  /** Optional owner-local ingestion health and persisted-submit provider; lifecycle is owned by serve.ts. */
++  ingestionService?: Pick<IngestionService, 'healthCheck' | 'submit'>;
+ }
+ 
+ /**
+@@ -2068,6 +2068,56 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+         return;
+       }
+ 
++      // Embedded engines need one physical owner. The legacy 202 path below
++      // only admits a queue job; it requires a separate worker to persist it.
++      // `Prefer: wait=persisted` is the explicit acknowledged mode: the HTTP
++      // owner dispatches through its already-connected IngestionService and
++      // returns only after canonical persistence has accepted or deduplicated
++      // the event. Existing callers that omit the header keep the 202 contract.
++      const waitForPersistence = (req.header('prefer') ?? '')
++        .split(',')
++        .map((value) => value.trim().toLowerCase())
++        .includes('wait=persisted');
++      if (waitForPersistence) {
++        if (!options.ingestionService) {
++          res.status(503).json({
++            error: 'persisted_ingestion_unavailable',
++            message: 'Owner-local persisted ingestion is not enabled.',
++          });
++          return;
++        }
++        const outcome = await options.ingestionService.submit(event);
++        if (outcome.kind === 'accepted' || outcome.kind === 'duplicate') {
++          res.status(200).json({
++            status: outcome.kind,
++            source_id: outcome.source_id,
++            slug: outcome.slug,
++            source_content_hash: contentHash,
++            content_hash: outcome.content_hash,
++          });
++          return;
++        }
++        if (outcome.kind === 'retryable') {
++          if (typeof outcome.retry_after_ms === 'number') {
++            res.setHeader('Retry-After', Math.max(1, Math.ceil(outcome.retry_after_ms / 1000)));
++          }
++          res.status(503).json({
++            error: outcome.code,
++            message: outcome.message,
++            source_id: outcome.source_id,
++            ...(outcome.slug ? { slug: outcome.slug } : {}),
++          });
++          return;
++        }
++        res.status(422).json({
++          error: outcome.code,
++          message: outcome.message,
++          source_id: outcome.source_id,
++          ...(outcome.slug ? { slug: outcome.slug } : {}),
++        });
++        return;
++      }
++
+       try {
+         const submission = await submitIngestCapture(
+           ingestQueue,
+diff --git a/src/commands/serve.ts b/src/commands/serve.ts
+index 703b32ed..be546b0e 100644
+--- a/src/commands/serve.ts
++++ b/src/commands/serve.ts
+@@ -26,7 +26,7 @@ export interface HttpServerHandle {
+   closeAllConnections?: () => void;
+ }
+ 
+-export type IngestionLifecycle = Pick<IngestionService, 'start' | 'stop' | 'healthCheck'>;
++export type IngestionLifecycle = Pick<IngestionService, 'start' | 'stop' | 'healthCheck' | 'submit'>;
+ 
+ export interface ServeOptions {
+   // Test seam — defaults to the live process. The lifecycle plumbing reads
+diff --git a/src/core/ingestion/service.ts b/src/core/ingestion/service.ts
+index 0140a344..eb5a7fd6 100644
+--- a/src/core/ingestion/service.ts
++++ b/src/core/ingestion/service.ts
+@@ -236,6 +236,16 @@ export class IngestionService {
+     };
+   }
+ 
++  /**
++   * Submit one already-validated event through the owner-local persistence
++   * lane and wait for its durable acknowledgment. Network surfaces call this
++   * instead of enqueueing work for a second process, which would violate the
++   * single-owner contract of embedded engines such as PGLite.
++   */
++  submit(event: IngestionEvent): Promise<IngestionEmitOutcome> {
++    return this.enqueueDispatch(event);
++  }
++
+   private enqueueDispatch(event: IngestionEvent): Promise<IngestionEmitOutcome> {
+     if (this.state !== 'starting' && this.state !== 'running') {
+       return Promise.resolve({
+diff --git a/test/ingestion/http-owner-vertical-slice.serial.test.ts b/test/ingestion/http-owner-vertical-slice.serial.test.ts
+index adf816bc..0b1f67a2 100644
+--- a/test/ingestion/http-owner-vertical-slice.serial.test.ts
++++ b/test/ingestion/http-owner-vertical-slice.serial.test.ts
+@@ -111,6 +111,25 @@ async function addReadOnlyToken(engine: PGLiteEngine): Promise<string> {
+   return token;
+ }
+ 
++async function addWriterToken(engine: PGLiteEngine): Promise<string> {
++  const token = generateToken('gbrain_at_');
++  const clientId = 'vertical-write-client';
++  await engine.executeRaw(
++    `INSERT INTO oauth_clients
++      (client_id, client_name, client_secret_hash, scope, grant_types, redirect_uris,
++       token_endpoint_auth_method, source_id, federated_read)
++     VALUES ($1, 'Vertical write client', NULL, 'read write', ARRAY['client_credentials'],
++       ARRAY[]::text[], 'none', 'vertical-slice', ARRAY['vertical-slice'])`,
++    [clientId],
++  );
++  await engine.executeRaw(
++    `INSERT INTO oauth_tokens (token_hash, token_type, client_id, scopes, expires_at)
++     VALUES ($1, 'access', $2, ARRAY['read', 'write'], $3)`,
++    [hashToken(token), clientId, Math.floor(Date.now() / 1000) + 3600],
++  );
++  return token;
++}
++
+ async function startOwner(
+   engine: PGLiteEngine,
+   cfg: GBrainConfig,
+@@ -195,11 +214,41 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
+       });
+       await engineOne.setConfig('search.mcp_keyword_only', 'true');
+       const token = await addReadOnlyToken(engineOne);
++      const writerToken = await addWriterToken(engineOne);
+       const identityOne = await brainId(engineOne);
+ 
+       const ownerOne = await startOwner(engineOne, cfg);
++      const address = ownerOne.server.address();
++      if (!address || typeof address === 'string') throw new Error('HTTP test listener missing TCP address');
++      const body = '# HTTP Persisted Proof\n\nneedle-owner-persisted-9127\n';
++      const ingest = await fetch(`http://127.0.0.1:${address.port}/ingest`, {
++        method: 'POST',
++        headers: {
++          Authorization: `Bearer ${writerToken}`,
++          'Content-Type': 'text/markdown',
++          Prefer: 'wait=persisted',
++          'X-Gbrain-Source-Id': 'vertical-slice',
++          'X-Gbrain-Slug': 'vertical/http-proof',
++          'X-Gbrain-Source-Uri': 'fixture://vertical/http-proof',
++        },
++        body,
++      });
++      expect(ingest.status).toBe(200);
++      const acknowledged = await ingest.json() as {
++        status: string;
++        source_id: string;
++        slug: string;
++        source_content_hash: string;
++        content_hash: string;
++      };
++      expect(['accepted', 'duplicate']).toContain(acknowledged.status);
++      expect(acknowledged.source_id).toBe('vertical-slice');
++      expect(acknowledged.slug).toBe('vertical/http-proof');
++      expect(acknowledged.source_content_hash)
++        .toBe(new Bun.CryptoHasher('sha256').update(body).digest('hex'));
++      expect(acknowledged.content_hash).toHaveLength(64);
+       const first = await waitForEmbedded(engineOne);
+-      expect(first.pages).toBe(1);
++      expect(first.pages).toBe(2);
+       expect(first.versions).toBe(0);
+       expect(first.chunks).toBeGreaterThan(0);
+       expect(first.embeddings).toBe(first.chunks);
+@@ -210,6 +259,8 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
+         expect(JSON.stringify(identity)).toContain(identityOne);
+         const result = await clientOne.callTool({ name: 'search', arguments: { query: 'needle-ulysses-7419' } });
+         expect(JSON.stringify(result)).toContain('needle-ulysses-7419');
++        const persisted = await clientOne.callTool({ name: 'get_page', arguments: { slug: 'vertical/http-proof' } });
++        expect(JSON.stringify(persisted)).toContain(acknowledged.content_hash);
+         const denied = await clientOne.callTool({
+           name: 'put_page',
+           arguments: { slug: 'must-not-write', type: 'note', title: 'denied', compiled_truth: 'denied' },
+@@ -231,7 +282,7 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
+ 
+       const ownerTwo = await startOwner(engineTwo, cfg);
+       const changed = await waitForEmbedded(engineTwo);
+-      expect(changed.pages).toBe(1);
++      expect(changed.pages).toBe(2);
+       expect(changed.versions).toBeGreaterThan(0);
+       expect(changed.chunks).toBeGreaterThan(0);
+       expect(changed.embeddings).toBe(changed.chunks);
+diff --git a/test/ingestion/service.test.ts b/test/ingestion/service.test.ts
+index 95d4f91f..efca3578 100644
+--- a/test/ingestion/service.test.ts
++++ b/test/ingestion/service.test.ts
+@@ -142,6 +142,23 @@ async function waitFor(
+ }
+ 
+ describe('IngestionService owner-local composition', () => {
++  test('accepts direct owner-local submissions without opening a second engine', async () => {
++    const fx = harness({
++      persist: async (_engine, item) => result(item.metadata!.slug as string),
++    });
++
++    await fx.service.start();
++    const outcome = await fx.service.submit(event('network-submit'));
++    expect(outcome).toEqual({
++      kind: 'accepted',
++      source_id: 'mail',
++      slug: 'network-submit',
++      content_hash: 'b'.repeat(64),
++    });
++    expect(fx.connectionCounts()).toEqual({ connectCalls: 0, disconnectCalls: 0 });
++    await fx.service.stop();
++  });
++
+   test('uses the supplied engine and serializes concurrent persistence FIFO', async () => {
+     const outcomes: IngestionEmitOutcome[] = [];
+     let concurrent = 0;
+diff --git a/test/serve-http-owner-lifecycle.test.ts b/test/serve-http-owner-lifecycle.test.ts
+index c910f9dd..63ec905e 100644
+--- a/test/serve-http-owner-lifecycle.test.ts
++++ b/test/serve-http-owner-lifecycle.test.ts
+@@ -43,6 +43,9 @@ function harness(overrides: {
+       if (overrides.ingestionStopHang) await new Promise<void>(() => undefined);
+     },
+     async healthCheck() { return {} as never; },
++    async submit() {
++      return { kind: 'accepted', source_id: 'test', slug: 'test', content_hash: 'a'.repeat(64) } as const;
++    },
+   };
+   let capturedOptions: ServeHttpOptions | null = null;
+   let resolveExit!: (code: number | undefined) => void;
+diff --git a/test/serve-http-startup-failure.serial.test.ts b/test/serve-http-startup-failure.serial.test.ts
+index c17c8a57..858d481e 100644
+--- a/test/serve-http-startup-failure.serial.test.ts
++++ b/test/serve-http-startup-failure.serial.test.ts
+@@ -84,6 +84,9 @@ describe('real HTTP owner startup failures', () => {
+               last_dispatch_error: null,
+               last_embedding_error: null,
+             }),
++            submit: async () => ({
++              kind: 'accepted', source_id: 'test', slug: 'test', content_hash: 'a'.repeat(64),
++            }),
+           }),
+         })).rejects.toThrow('GBrain HTTP owner failed to start');
+       });
+-- 
+2.50.1 (Apple Git-155)
+

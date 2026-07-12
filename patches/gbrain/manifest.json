@@ -5,6 +5,9 @@
   "base_commit": "a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a",
   "patches": [
     "0001-feat-ingestion-add-supervised-single-owner-source-se.patch",
-    "0002-fix-pglite-surface-lock-filesystem-errors-immediately.patch"
+    "0002-fix-pglite-surface-lock-filesystem-errors-immediately.patch",
+    "0003-feat-ingestion-acknowledge-persisted-http-writes-in.patch",
+    "0004-feat-auth-scope-legacy-bearer-tokens.patch",
+    "0005-feat-auth-grant-legacy-bearer-source-allowlists.patch"
   ]
 }

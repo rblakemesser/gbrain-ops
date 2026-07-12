@@ -1,0 +1,146 @@
+From a691fc02fc220d6d9564cac75d381881282ade55 Mon Sep 17 00:00:00 2001
+From: GBrain Ops <person@example.test>
+Date: Sat, 11 Jul 2026 22:37:37 -0500
+Subject: [PATCH] feat(auth): grant legacy bearer source allowlists
+
+---
+ src/commands/auth.ts          | 30 +++++++++++++++++++++++-------
+ test/auth-create-args.test.ts | 19 ++++++++++++++++++-
+ 2 files changed, 41 insertions(+), 8 deletions(-)
+
+diff --git a/src/commands/auth.ts b/src/commands/auth.ts
+index a7b4d2bc..7a855f0f 100644
+--- a/src/commands/auth.ts
++++ b/src/commands/auth.ts
+@@ -66,7 +66,7 @@ async function withConfiguredSql<T>(
+   }
+ }
+ 
+-async function create(name: string, opts: { takesHolders?: string[]; scopes?: string[] } = {}) {
++async function create(name: string, opts: { takesHolders?: string[]; scopes?: string[]; allowedSources?: string[] } = {}) {
+   if (!name) { console.error('Usage: auth create <name> [--takes-holders world,garry] [--scopes read,write,admin]'); process.exit(1); }
+   const scopes = opts.scopes && opts.scopes.length > 0 ? opts.scopes : ['read', 'write', 'admin'];
+   const invalidScopes = scopes.filter(scope => !['read', 'write', 'admin'].includes(scope));
+@@ -84,7 +84,11 @@ async function create(name: string, opts: { takesHolders?: string[]; scopes?: st
+       const takesHolders = opts.takesHolders && opts.takesHolders.length > 0
+         ? opts.takesHolders
+         : ['world'];
+-      const permissions = { takes_holders: takesHolders, scopes };
++      const permissions = {
++        takes_holders: takesHolders,
++        scopes,
++        ...(opts.allowedSources && opts.allowedSources.length > 0 ? { source_id: opts.allowedSources } : {}),
++      };
+       // JSONB write: pass the object via executeRawJsonb with an explicit
+       // ::jsonb cast in the SQL string. Both engines round-trip the object
+       // through the wire-protocol type oid without the v0.12.0 double-encode
+@@ -475,7 +479,7 @@ async function registerClient(name: string, args: string[]) {
+  * resolved to `rest[0]` when `takesIdx === -1`, silently dropping the name on
+  * the bare `gbrain auth create <name>` form.
+  */
+-export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolders?: string[]; scopes?: string[] } {
++export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolders?: string[]; scopes?: string[]; allowedSources?: string[] } {
+   const takesIdx = rest.indexOf('--takes-holders');
+   const takesHolders = takesIdx >= 0 && rest[takesIdx + 1]
+     ? rest[takesIdx + 1].split(',').map(s => s.trim()).filter(Boolean)
+@@ -486,8 +490,15 @@ export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolder
+   const scopes = scopesValue
+     ? scopesValue.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
+     : undefined;
+-  const positional = rest.find(a => !a.startsWith('--') && a !== takesValue && a !== scopesValue);
+-  return { name: positional || '', takesHolders, scopes };
++  const sourcesIdx = rest.indexOf('--federated-read');
++  const sourcesValue = sourcesIdx >= 0 ? rest[sourcesIdx + 1] : undefined;
++  const allowedSources = sourcesValue
++    ? sourcesValue.split(',').map(s => s.trim()).filter(Boolean)
++    : undefined;
++  const positional = rest.find(
++    a => !a.startsWith('--') && a !== takesValue && a !== scopesValue && a !== sourcesValue,
++  );
++  return { name: positional || '', takesHolders, scopes, allowedSources };
+ }
+ 
+ export async function runAuth(args: string[]): Promise<void> {
+@@ -496,7 +507,11 @@ export async function runAuth(args: string[]): Promise<void> {
+     case 'create': {
+       // v0.28: optional --takes-holders world,garry,brain (default: world only)
+       const parsed = parseAuthCreateArgs(rest);
+-      await create(parsed.name, { takesHolders: parsed.takesHolders, scopes: parsed.scopes });
++      await create(parsed.name, {
++        takesHolders: parsed.takesHolders,
++        scopes: parsed.scopes,
++        allowedSources: parsed.allowedSources,
++      });
+       return;
+     }
+     case 'list': await list(); return;
+@@ -519,13 +534,14 @@ export async function runAuth(args: string[]): Promise<void> {
+       console.log(`GBrain Token Management
+ 
+ Usage:
+-  gbrain auth create <name> [--takes-holders world,garry,brain] [--scopes read,write,admin]
++  gbrain auth create <name> [--takes-holders world,garry,brain] [--scopes read,write,admin] [--federated-read id1,id2]
+                                                           Create a legacy bearer token. v0.28: --takes-holders
+                                                           sets the per-token allow-list for the takes.holder
+                                                           field (default: ["world"]). MCP-bound calls to
+                                                           takes_list / takes_search / query filter by this.
+                                                           --scopes defaults to legacy full access; use
+                                                           --scopes read for least-privilege clients.
++                                                          --federated-read grants an explicit source allow-list.
+   gbrain auth list                                         List all tokens
+   gbrain auth revoke <name>                                Revoke a legacy token
+   gbrain auth permissions <name> set-takes-holders <h1,h2,h3>
+diff --git a/test/auth-create-args.test.ts b/test/auth-create-args.test.ts
+index 5e28150a..6ab02b32 100644
+--- a/test/auth-create-args.test.ts
++++ b/test/auth-create-args.test.ts
+@@ -5,7 +5,12 @@ describe('parseAuthCreateArgs', () => {
+   test('bare name (no flag) resolves the name — regression for the dropped-name bug', () => {
+     // Pre-fix this returned name='' because rest[takesIdx+1] === rest[0] when
+     // takesIdx === -1, excluding the only positional from the search.
+-    expect(parseAuthCreateArgs(['claude-code'])).toEqual({ name: 'claude-code', takesHolders: undefined, scopes: undefined });
++    expect(parseAuthCreateArgs(['claude-code'])).toEqual({
++      name: 'claude-code',
++      takesHolders: undefined,
++      scopes: undefined,
++      allowedSources: undefined,
++    });
+   });
+ 
+   test('name + --takes-holders', () => {
+@@ -13,6 +18,7 @@ describe('parseAuthCreateArgs', () => {
+       name: 'claude-code',
+       takesHolders: ['world', 'garry'],
+       scopes: undefined,
++      allowedSources: undefined,
+     });
+   });
+ 
+@@ -21,6 +27,7 @@ describe('parseAuthCreateArgs', () => {
+       name: 'claude-code',
+       takesHolders: ['world'],
+       scopes: undefined,
++      allowedSources: undefined,
+     });
+   });
+ 
+@@ -43,7 +50,17 @@ describe('parseAuthCreateArgs', () => {
+       name: 'reader',
+       takesHolders: undefined,
+       scopes: ['read', 'write'],
++      allowedSources: undefined,
+     });
+     expect(parseAuthCreateArgs(['reader', '--scopes', 'read write']).scopes).toEqual(['read', 'write']);
+   });
++
++  test('federated source allow-list is parsed and not mistaken for the name', () => {
++    expect(parseAuthCreateArgs(['--federated-read', 'messages,gmail', 'reader'])).toEqual({
++      name: 'reader',
++      takesHolders: undefined,
++      scopes: undefined,
++      allowedSources: ['messages', 'gmail'],
++    });
++  });
+ });
+-- 
+2.50.1 (Apple Git-155)

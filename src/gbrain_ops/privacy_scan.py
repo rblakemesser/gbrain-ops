@@ -25,7 +25,12 @@ ALLOWED_EMAILS = {"user@example.com", "person@example.test"}
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".gz", ".zip"}
 
 def tracked_files(root: Path) -> list[Path]:
-    proc = subprocess.run(["git", "ls-files", "-z"], cwd=root, check=True, stdout=subprocess.PIPE)
+    proc = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=root,
+        check=True,
+        stdout=subprocess.PIPE,
+    )
     return [root / item.decode() for item in proc.stdout.split(b"\0") if item]
 
 def scan_repository(root: Path) -> list[Finding]:

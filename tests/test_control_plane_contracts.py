@@ -8,7 +8,7 @@ import pytest
 from gbrain_ops.config import load_config
 from gbrain_ops.contracts import validate_contract
 from gbrain_ops.recovery import build_source_inventory, recovery_readiness
-from gbrain_ops.service import render_launchd_service
+from gbrain_ops.service import render_launchd_service, render_owner_launcher
 
 
 def example_env(tmp_path: Path) -> dict[str, str]:
@@ -74,3 +74,41 @@ def test_launchd_renderer_uses_program_arguments_not_shell_commands() -> None:
     assert value["ProgramArguments"] == ["/usr/bin/python3", "/opt/gbrain/run.py", "--source", "mail"]
     assert "Program" not in value
     assert value["StartInterval"] == 900
+
+
+def test_launchd_renderer_supports_one_long_lived_owner() -> None:
+    rendered = render_launchd_service(
+        label="org.example.gbrain.owner",
+        argv=["/opt/bun", "/opt/gbrain/src/cli.ts", "serve", "--http", "--with-ingestion"],
+        stdout_path="/var/tmp/gbrain-owner.out",
+        stderr_path="/var/tmp/gbrain-owner.err",
+        keep_alive=True,
+        throttle_interval=15,
+        working_directory="/opt/gbrain",
+        environment={"GBRAIN_HOME": "/private/gbrain"},
+    )
+    value = plistlib.loads(rendered)
+    assert value["KeepAlive"] is True
+    assert value["RunAtLoad"] is True
+    assert value["ThrottleInterval"] == 15
+    assert value["WorkingDirectory"] == "/opt/gbrain"
+    assert value["EnvironmentVariables"] == {"GBRAIN_HOME": "/private/gbrain"}
+    assert "StartInterval" not in value
+
+
+def test_owner_launcher_execs_fixed_runtime_with_ingestion(tmp_path: Path) -> None:
+    launcher = render_owner_launcher(
+        bun=tmp_path / "bin" / "bun",
+        runtime=tmp_path / "runtime with spaces",
+        gbrain_home=tmp_path / "brain",
+        env_file=tmp_path / "private env",
+        port=3131,
+    )
+    assert "exec " in launcher
+    assert "serve --http --with-ingestion" in launcher
+    assert "--bind 127.0.0.1" in launcher
+    assert "--suppress-bootstrap-token" in launcher
+    assert f"export HOME={tmp_path}" in launcher
+    assert f"export GBRAIN_HOME={tmp_path}" in launcher
+    assert "runtime with spaces" in launcher
+    assert "source " in launcher

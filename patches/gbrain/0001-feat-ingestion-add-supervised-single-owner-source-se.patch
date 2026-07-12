@@ -5572,7 +5572,6 @@ index 00000000..1dc9cef5
 +    )).toEqual([]);
 +  });
 +});
-\ No newline at end of file
 diff --git a/test/ingestion/daemon.test.ts b/test/ingestion/daemon.test.ts
 index a9612de9..91bd490d 100644
 --- a/test/ingestion/daemon.test.ts
