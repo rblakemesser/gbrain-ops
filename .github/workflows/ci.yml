@@ -39,7 +39,7 @@ jobs:
           bun-version: "1.3.13"
       - run: python -m pip install -e .
       - run: git clone --filter=blob:none https://github.com/garrytan/gbrain.git vendor/gbrain
-      - run: gbrain-ops vendor-promote --vendor vendor/gbrain --manifest patches/gbrain/manifest.json --output vendor/release
+      - run: gbrain-ops vendor-promote --vendor "$GITHUB_WORKSPACE/vendor/gbrain" --manifest "$GITHUB_WORKSPACE/patches/gbrain/manifest.json" --output "$GITHUB_WORKSPACE/vendor/release"
       - name: Install promoted runtime dependencies without opening a local brain
         working-directory: vendor/release
         run: PATH="$HOME/.bun/bin:/usr/bin:/bin" bun install --frozen-lockfile
