@@ -23,6 +23,10 @@ class OwnerClientError(RuntimeError):
     """Secret-free failure crossing the GBrain owner boundary."""
 
 
+class OwnerResourceNotFoundError(OwnerClientError):
+    """A typed, non-operational absence reported by the owner."""
+
+
 @dataclass(frozen=True)
 class OwnerCredentials:
     base_url: str
@@ -133,6 +137,15 @@ def content_hash(content: str) -> str:
 
 def _tool_payload(result: CallToolResult) -> dict[str, Any] | list[Any]:
     if result.isError:
+        for block in result.content:
+            if not isinstance(block, TextContent):
+                continue
+            try:
+                error_value = json.loads(block.text)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(error_value, dict) and error_value.get("error") == "page_not_found":
+                raise OwnerResourceNotFoundError("owner resource was not found")
         raise OwnerClientError("owner tool call failed")
     if result.structuredContent is not None:
         return dict(result.structuredContent)

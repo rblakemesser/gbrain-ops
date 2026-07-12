@@ -17,6 +17,7 @@ from gbrain_ops.owner_client import (
     OwnerClient,
     OwnerClientError,
     OwnerCredentials,
+    OwnerResourceNotFoundError,
     PersistenceReceipt,
     PersistedIngest,
     _tool_payload,
@@ -124,6 +125,19 @@ def test_tool_payload_accepts_structured_content() -> None:
 def test_tool_payload_accepts_json_array_text() -> None:
     result = CallToolResult(content=[TextContent(type="text", text='[{"slug":"messages/day"}]')])
     assert _tool_payload(result) == [{"slug": "messages/day"}]
+
+
+def test_tool_payload_types_page_not_found_separately() -> None:
+    result = CallToolResult(
+        isError=True,
+        content=[TextContent(type="text", text='{"error":"page_not_found"}')],
+    )
+    with pytest.raises(OwnerResourceNotFoundError, match="not found"):
+        _tool_payload(result)
+
+    operational = CallToolResult(isError=True, content=[TextContent(type="text", text='{"error":"forbidden"}')])
+    with pytest.raises(OwnerClientError, match="tool call failed"):
+        _tool_payload(operational)
 
 
 class FakeOwnerClient(OwnerClient):

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from gbrain_ops.owner_client import OwnerClientError
+from gbrain_ops.owner_client import OwnerClientError, OwnerResourceNotFoundError
 from scripts.retrieve_personal_evidence import privacy_safe_summary
 
 from gbrain_ops.evidence_retrieval import (
@@ -187,6 +187,17 @@ def test_owner_failure_propagates_as_sanitized_retrieval_failure() -> None:
             )
         )
     assert "secret upstream failure" not in str(caught.value)
+
+
+def test_typed_owner_not_found_becomes_absent_evidence() -> None:
+    client = FakeClient({}, [])
+
+    async def missing(_slug: str) -> dict[str, object]:
+        raise OwnerResourceNotFoundError("not found")
+
+    client.get_page = missing  # type: ignore[method-assign]
+    retriever = PersonalEvidenceRetriever(client, relation())
+    assert asyncio.run(retriever._page("messages/2026/2026-07-10")) is None
 
 
 @pytest.mark.parametrize(

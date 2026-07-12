@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .owner_client import OwnerClient, OwnerClientError
+from .owner_client import OwnerClient, OwnerClientError, OwnerResourceNotFoundError
 
 RELATIONSHIP_SCHEMA = "gbrain-ops-relationships/v1"
 EVIDENCE_SCHEMA = "gbrain-ops-personal-evidence/v1"
@@ -180,6 +180,8 @@ class PersonalEvidenceRetriever:
     async def _page(self, slug: str, *, score: float | None = None) -> EvidencePage | None:
         try:
             page = await self.client.get_page(slug)
+        except OwnerResourceNotFoundError:
+            return None
         except OwnerClientError as exc:
             raise EvidenceRetrievalError("owner page retrieval failed") from exc
         if page.get("error") == "page_not_found":
