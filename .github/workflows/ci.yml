@@ -20,7 +20,7 @@ jobs:
           cache: pip
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest -q
-      - run: python -m ruff check src/gbrain_ops
+      - run: python -m ruff check src tests scripts adapters
       - run: python -m gbrain_ops.privacy_scan .
       - uses: gitleaks/gitleaks-action@v2
         env:
