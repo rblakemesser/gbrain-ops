@@ -49,8 +49,8 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
     return payload
 
 
-def main() -> int:
-    args = parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
     if args.candidate_limit <= 0:
         raise SystemExit("--candidate-limit must be positive")
     payload = asyncio.run(run(args))

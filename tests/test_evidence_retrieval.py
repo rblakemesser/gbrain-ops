@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from gbrain_ops.owner_client import OwnerClientError, OwnerResourceNotFoundError
+import scripts.retrieve_personal_evidence as retrieval_cli
 from scripts.retrieve_personal_evidence import privacy_safe_summary
 
 from gbrain_ops.evidence_retrieval import (
@@ -250,3 +251,39 @@ def test_summary_output_drops_queries_and_sections() -> None:
     assert secret not in serialized
     assert "candidate_queries" not in serialized
     assert '"candidate_query_count": 1' in serialized
+
+
+@pytest.mark.parametrize(("answerable", "expected_exit"), ((True, 0), (False, 3)))
+def test_cli_main_enforces_answerable_exit_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    answerable: bool,
+    expected_exit: int,
+) -> None:
+    async def fake_run(_args: object) -> dict[str, object]:
+        return {
+            "answerable": answerable,
+            "disposition": "answerable" if answerable else "abstain",
+            "gaps": [] if answerable else ["missing evidence"],
+        }
+
+    monkeypatch.setattr(retrieval_cli, "run", fake_run)
+    exit_code = retrieval_cli.main(
+        [
+            "--credentials",
+            "/private/owner.json",
+            "--relationships",
+            "/private/relationships.json",
+            "--relationship",
+            "my mom",
+            "--start",
+            "2026-07-10",
+            "--end",
+            "2026-07-11",
+            "--candidate-query",
+            "childcare travel coverage",
+        ]
+    )
+    assert exit_code == expected_exit
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["answerable"] is answerable
