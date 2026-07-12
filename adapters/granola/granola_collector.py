@@ -44,9 +44,12 @@ def apply_local_note_corrections(note: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(old, str) or not isinstance(new, str) or not old:
             continue
         def replace(value: Any) -> Any:
-            if isinstance(value, str): return value.replace(old, new)
-            if isinstance(value, list): return [replace(item) for item in value]
-            if isinstance(value, dict): return {key: replace(item) for key, item in value.items()}
+            if isinstance(value, str):
+                return value.replace(old, new)
+            if isinstance(value, list):
+                return [replace(item) for item in value]
+            if isinstance(value, dict):
+                return {key: replace(item) for key, item in value.items()}
             return value
         corrected = replace(corrected)
     return corrected if isinstance(corrected, dict) else note

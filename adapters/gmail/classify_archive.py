@@ -2,7 +2,7 @@
 import json
 import os
 import re
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 

@@ -81,20 +81,33 @@ def classify(event: dict) -> dict:
     low_signal = matches_any(text, LOW_SIGNAL_PATTERNS) and nonself_count == 0 and not any([travel, finance, health, housing, recruiting, social])
     planning_significant = recurring or nonself_count >= 2 or any([travel, finance, health, housing, recruiting])
 
-    tags=[]
-    if human: tags.append('human_attendees_likely')
-    if recurring: tags.append('recurring_event')
-    if all_day: tags.append('all_day')
-    if travel: tags.append('travel')
-    if finance: tags.append('finance')
-    if health: tags.append('health')
-    if housing: tags.append('housing')
-    if recruiting: tags.append('recruiting')
-    if social: tags.append('social')
-    if work_related: tags.append('work_related')
-    if family_related: tags.append('family_related')
-    if low_signal: tags.append('low_signal_block')
-    if planning_significant: tags.append('planning_significant')
+    tags = []
+    if human:
+        tags.append('human_attendees_likely')
+    if recurring:
+        tags.append('recurring_event')
+    if all_day:
+        tags.append('all_day')
+    if travel:
+        tags.append('travel')
+    if finance:
+        tags.append('finance')
+    if health:
+        tags.append('health')
+    if housing:
+        tags.append('housing')
+    if recruiting:
+        tags.append('recruiting')
+    if social:
+        tags.append('social')
+    if work_related:
+        tags.append('work_related')
+    if family_related:
+        tags.append('family_related')
+    if low_signal:
+        tags.append('low_signal_block')
+    if planning_significant:
+        tags.append('planning_significant')
 
     event['human_attendees_likely'] = human
     event['recurring_event'] = recurring

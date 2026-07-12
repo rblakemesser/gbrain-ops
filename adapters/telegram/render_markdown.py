@@ -6,7 +6,6 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Iterable
 import json
-import os
 
 from telegram_event_model import merge_events
 
