@@ -96,6 +96,28 @@ def test_launchd_renderer_supports_one_long_lived_owner() -> None:
     assert "StartInterval" not in value
 
 
+def test_launchd_renderer_supports_isolated_postgres_service() -> None:
+    rendered = render_launchd_service(
+        label="com.gbrain.postgres",
+        argv=["/opt/homebrew/opt/postgresql@17/bin/postgres", "-D", "/private/gbrain/postgres/17/data"],
+        stdout_path="/private/gbrain/postgres/17/logs/launchd.out",
+        stderr_path="/private/gbrain/postgres/17/logs/launchd.err",
+        keep_alive=True,
+        throttle_interval=15,
+        working_directory="/private/gbrain/postgres/17/data",
+        environment={"LC_ALL": "en_US.UTF-8"},
+    )
+    value = plistlib.loads(rendered)
+    assert value["ProgramArguments"] == [
+        "/opt/homebrew/opt/postgresql@17/bin/postgres",
+        "-D",
+        "/private/gbrain/postgres/17/data",
+    ]
+    assert value["KeepAlive"] is True
+    assert value["EnvironmentVariables"] == {"LC_ALL": "en_US.UTF-8"}
+    assert value["WorkingDirectory"] == "/private/gbrain/postgres/17/data"
+
+
 def test_owner_launcher_execs_fixed_runtime_with_ingestion(tmp_path: Path) -> None:
     launcher = render_owner_launcher(
         bun=tmp_path / "bin" / "bun",
