@@ -36,6 +36,7 @@ MAPPING = {
         "telegram_desktop_import.py": "adapters/telegram/telegram_desktop_import.py",
         "telegram_event_model.py": "adapters/telegram/telegram_event_model.py",
         "telegram_runtime.py": "adapters/telegram/telegram_runtime.py",
+        "run_fresh_sync.sh": "adapters/telegram/run_fresh_sync.sh",
         "config.example.json": "adapters/telegram/config.example.json",
     },
     "sync-monitor": {

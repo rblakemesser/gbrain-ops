@@ -9,6 +9,7 @@ Telegram access hashes and session material.
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 import hashlib
 import json
 import os
@@ -20,7 +21,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, AsyncIterator, Iterable
 
-from telegram_event_model import normalize_event
+from telegram_event_model import merge_events, normalize_event
 
 ROOT = Path(os.environ.get("GBRAIN_OPS_TELEGRAM_ROOT", Path.home() / ".local/share/gbrain-ops/telegram")).expanduser()
 DATA_DIR = ROOT / "data"
@@ -64,11 +65,13 @@ class CollectorConfig:
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.parent.chmod(0o700)
     with NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as temp:
         temp.write(content)
         temp_path = Path(temp.name)
     os.replace(temp_path, path)
+    path.chmod(0o600)
 
 
 def atomic_write_json(path: Path, value: Any) -> None:
@@ -193,11 +196,11 @@ def require_owner_only_session() -> None:
 def peer_kind(entity: Any) -> str:
     """Normalize a Telethon entity to a stable non-secret peer kind."""
     name = type(entity).__name__
-    if name == "User":
+    if name in {"User", "UserEmpty"}:
         return "user"
-    if name == "Chat":
+    if name in {"Chat", "ChatForbidden", "ChatEmpty"}:
         return "chat"
-    if name == "Channel":
+    if name in {"Channel", "ChannelForbidden"}:
         return "supergroup" if bool(getattr(entity, "megagroup", False)) else "channel"
     raise RuntimePrerequisiteError(f"unsupported Telegram entity type: {name}")
 
@@ -242,17 +245,37 @@ def _excluded(peer: dict[str, str], config: CollectorConfig) -> str | None:
     return None
 
 
-def _dialog_row(dialog: Any, config: CollectorConfig) -> dict[str, Any]:
+def _dialog_row(dialog: Any, config: CollectorConfig, *, account_id: str | None = None) -> dict[str, Any]:
     peer = safe_peer(dialog.entity)
     excluded = _excluded(peer, config)
+    entity_name = type(dialog.entity).__name__
+    unavailable = entity_name.endswith("Forbidden") or entity_name.endswith("Empty")
+    if unavailable:
+        excluded = "unavailable"
     is_archived = bool(getattr(dialog, "folder_id", None))
     is_muted = bool(getattr(getattr(dialog, "dialog", None), "notify_settings", None) and getattr(dialog.dialog.notify_settings, "mute_until", None))
     if is_archived and not config.include_archived_dialogs:
         excluded = excluded or "archived_disabled"
     if is_muted and not config.include_muted_dialogs:
         excluded = excluded or "muted_disabled"
+    is_saved_messages = bool(getattr(dialog.entity, "is_self", False)) or (
+        account_id is not None and peer["kind"] == "user" and peer["raw_id"] == account_id
+    )
+    is_bot = bool(getattr(dialog.entity, "bot", False))
+    if is_saved_messages:
+        dialog_type = "saved_messages"
+    elif is_bot:
+        dialog_type = "bot"
+    elif peer["kind"] == "user":
+        dialog_type = "dm"
+    else:
+        dialog_type = peer["kind"]
     return {
         **peer,
+        "dialog_type": dialog_type,
+        "is_bot": is_bot,
+        "is_saved_messages": is_saved_messages,
+        "is_unavailable": unavailable,
         "is_forum": bool(getattr(dialog.entity, "forum", False)),
         "is_archived": is_archived,
         "is_muted": is_muted,
@@ -281,7 +304,7 @@ async def iter_forum_topics(client: Any, entity: Any) -> AsyncIterator[dict[str,
     while True:
         try:
             result = await client(functions.messages.GetForumTopicsRequest(
-                channel=entity,
+                peer=entity,
                 offset_date=offset_date,
                 offset_id=offset_id,
                 offset_topic=offset_topic,
@@ -313,12 +336,18 @@ async def iter_forum_topics(client: Any, entity: Any) -> AsyncIterator[dict[str,
 async def inventory(client: Any, config: CollectorConfig) -> dict[str, Any]:
     """Enumerate all reachable dialogs and topic roots without collecting history."""
     rows: list[dict[str, Any]] = []
+    account_id = await authorized_account_id(client)
     async for dialog in client.iter_dialogs():
-        row = _dialog_row(dialog, config)
+        row = _dialog_row(dialog, config, account_id=account_id)
         if row["included"] and row["is_forum"]:
             row["topics"] = [topic async for topic in iter_forum_topics(client, dialog.entity)]
         rows.append(row)
     rows.sort(key=lambda row: (row["kind"], row["raw_id"]))
+    included_rows = [row for row in rows if row["included"]]
+    by_type = {
+        kind: sum(1 for row in included_rows if row["dialog_type"] == kind)
+        for kind in ("saved_messages", "bot", "dm", "chat", "supergroup", "channel")
+    }
     result = {
         "schema_version": 1,
         "generated_at": utc_now(),
@@ -328,6 +357,9 @@ async def inventory(client: Any, config: CollectorConfig) -> dict[str, Any]:
             "included": sum(1 for row in rows if row["included"]),
             "excluded_or_unavailable": sum(1 for row in rows if not row["included"]),
             "forum_topics": sum(len(row["topics"]) for row in rows),
+            "archived": sum(1 for row in included_rows if row["is_archived"]),
+            "muted": sum(1 for row in included_rows if row["is_muted"]),
+            "by_type": by_type,
         },
     }
     atomic_write_json(DIALOGS_PATH, result)
@@ -375,6 +407,19 @@ def _media_metadata(message: Any) -> dict[str, Any] | None:
     }
 
 
+def _reaction_metadata(message: Any) -> list[dict[str, Any]]:
+    reactions = getattr(getattr(message, "reactions", None), "results", None) or []
+    result: list[dict[str, Any]] = []
+    for item in reactions:
+        reaction = getattr(item, "reaction", None)
+        display = getattr(reaction, "emoticon", None)
+        if display is None:
+            document_id = getattr(reaction, "document_id", None)
+            display = f"custom:{document_id}" if document_id is not None else type(reaction).__name__
+        result.append({"reaction": str(display), "count": int(getattr(item, "count", 0) or 0)})
+    return sorted(result, key=lambda value: value["reaction"])
+
+
 def message_to_event(message: Any, peer: dict[str, str], account_id: str, *, observed_at: str | None = None) -> dict[str, Any]:
     """Normalize one Telethon message to the append-only safe event contract."""
     message_id = getattr(message, "id", None)
@@ -383,14 +428,38 @@ def message_to_event(message: Any, peer: dict[str, str], account_id: str, *, obs
         raise RuntimePrerequisiteError("message is missing stable ID or timestamp")
     topic_id = _message_topic_id(message)
     text = str(getattr(message, "raw_text", None) or getattr(message, "message", None) or "")
+    reactions = _reaction_metadata(message)
+    # Inventory rows also carry mutable polling metadata (latest message,
+    # topic snapshots, archive/mute state). Persisting that whole row made
+    # every ordinary overlap poll look like a new lifecycle observation for
+    # older messages. Keep only peer identity and stable classification here;
+    # the full current inventory remains in dialogs.json.
+    event_peer = {
+        key: peer[key]
+        for key in (
+            "kind",
+            "raw_id",
+            "title",
+            "username",
+            "dialog_type",
+            "is_bot",
+            "is_saved_messages",
+            "is_forum",
+        )
+        if key in peer
+    }
     event = {
         "schema_version": 2,
         "source": "telegram",
-        "event_kind": "edit" if bool(getattr(message, "edit_date", None)) else "upsert",
+        "event_kind": (
+            "edit"
+            if bool(getattr(message, "edit_date", None))
+            else "reaction_snapshot" if reactions else "upsert"
+        ),
         "availability": "active",
         "account_id": str(account_id),
         "observed_at": observed_at or utc_now(),
-        "peer": peer,
+        "peer": event_peer,
         "topic": {"id": topic_id} if topic_id is not None else {},
         "message": {
             "id": int(message_id),
@@ -404,14 +473,53 @@ def message_to_event(message: Any, peer: dict[str, str], account_id: str, *, obs
             "reply_to_top_id": topic_id,
             "edited_at": _iso_or_none(getattr(message, "edit_date", None)),
             "media": _media_metadata(message),
+            "reactions": reactions,
         },
         "provenance": {"capture_method": "mtproto", "confidence": "authoritative"},
     }
     normalized = normalize_event(event)
+    stable_payload = {key: value for key, value in normalized.items() if key not in {"observed_at", "payload_sha256"}}
     normalized["payload_sha256"] = hashlib.sha256(
-        json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        json.dumps(stable_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return normalized
+
+
+def recent_delete_events(
+    peer: dict[str, str],
+    fetched_events: list[dict[str, Any]],
+    *,
+    raw_dir: Path = RAW_DIR,
+    observed_at: str | None = None,
+) -> list[dict[str, Any]]:
+    """Emit confirmed deletes only inside the bounded fetched MTProto ID window."""
+    if not fetched_events:
+        return []
+    fetched_ids = {int(event["message"]["id"]) for event in fetched_events}
+    lower, upper = min(fetched_ids), max(fetched_ids)
+    prior: list[dict[str, Any]] = []
+    peer_dir = raw_dir / _peer_key(peer)
+    for path in sorted(peer_dir.glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                prior.append(json.loads(line))
+    deletes: list[dict[str, Any]] = []
+    for event in merge_events(prior):
+        message_id = int(event["message"]["id"])
+        if not (lower <= message_id <= upper) or message_id in fetched_ids:
+            continue
+        if event.get("availability") != "active" or event.get("provenance", {}).get("capture_method") != "mtproto":
+            continue
+        deleted = deepcopy(event)
+        deleted["event_kind"] = "delete"
+        deleted["availability"] = "deleted"
+        deleted["observed_at"] = observed_at or utc_now()
+        stable = {key: value for key, value in deleted.items() if key not in {"observed_at", "payload_sha256"}}
+        deleted["payload_sha256"] = hashlib.sha256(
+            json.dumps(stable, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        deletes.append(normalize_event(deleted))
+    return deletes
 
 
 def _peer_key(peer: dict[str, str]) -> str:
@@ -423,7 +531,12 @@ def _month(event: dict[str, Any]) -> str:
 
 
 def append_events(events: Iterable[dict[str, Any]]) -> dict[str, int]:
-    """Append normalized lifecycle events into deterministic monthly JSONL segments."""
+    """Atomically merge new lifecycle observations into monthly JSONL segments.
+
+    The observation timestamp is intentionally excluded from the dedupe key so
+    an overlapping recent poll remains idempotent. Content/provenance changes
+    still append a new lifecycle observation.
+    """
     grouped: dict[Path, list[dict[str, Any]]] = {}
     for raw in events:
         event = normalize_event(raw)
@@ -431,11 +544,44 @@ def append_events(events: Iterable[dict[str, Any]]) -> dict[str, int]:
         grouped.setdefault(path, []).append(event)
     counts: dict[str, int] = {}
     for path, values in grouped.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        content = "".join(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n" for value in values)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(content)
-        counts[str(path)] = len(values)
+        existing: list[dict[str, Any]] = []
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    existing.append(normalize_event(json.loads(line)))
+
+        def fingerprint(event: dict[str, Any]) -> str:
+            stable = {key: value for key, value in event.items() if key not in {"observed_at", "payload_sha256"}}
+            return hashlib.sha256(
+                json.dumps(stable, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+
+        # Older collector versions appended the same observation on every
+        # overlapping poll because ``observed_at`` changed. Collapse those
+        # historical duplicates while retaining distinct edits, reactions,
+        # deletes, and lower-confidence fallback observations.
+        deduped_existing: list[dict[str, Any]] = []
+        known: set[str] = set()
+        for event in existing:
+            digest = fingerprint(event)
+            if digest in known:
+                continue
+            known.add(digest)
+            deduped_existing.append(event)
+        appended = []
+        for value in values:
+            digest = fingerprint(value)
+            if digest not in known:
+                known.add(digest)
+                appended.append(value)
+        merged = deduped_existing + appended
+        merged.sort(key=lambda event: (event["message"]["date"], int(event["message"]["id"]), event["observed_at"]))
+        content = "".join(
+            json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+            for value in merged
+        )
+        _atomic_write(path, content)
+        counts[str(path)] = len(appended)
     return counts
 
 
@@ -450,13 +596,21 @@ def load_checkpoint(peer: dict[str, str]) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def save_checkpoint(peer: dict[str, str], events: list[dict[str, Any]], *, mode: str) -> dict[str, Any]:
+def save_checkpoint(
+    peer: dict[str, str],
+    events: list[dict[str, Any]],
+    *,
+    mode: str,
+    backfill_complete: bool | None = None,
+) -> dict[str, Any]:
     current = load_checkpoint(peer)
     ids = [int(event["message"]["id"]) for event in events]
     if ids:
         current["oldest_collected_id"] = min(ids) if current.get("oldest_collected_id") is None else min(int(current["oldest_collected_id"]), min(ids))
         current["newest_collected_id"] = max(ids) if current.get("newest_collected_id") is None else max(int(current["newest_collected_id"]), max(ids))
     current.update({"peer": peer, "last_mode": mode, "updated_at": utc_now()})
+    if backfill_complete is not None:
+        current["backfill_complete"] = backfill_complete
     atomic_write_json(checkpoint_path(peer), current)
     return current
 

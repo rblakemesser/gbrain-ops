@@ -32,10 +32,13 @@ def load_json(path: Path, default: Any) -> Any:
 
 
 def write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.parent.chmod(0o700)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    tmp.chmod(0o600)
     tmp.replace(path)
+    path.chmod(0o600)
 
 
 def summarize_output(output: str, max_lines: int = 30) -> str:
@@ -137,7 +140,8 @@ def main() -> int:
     args = parser.parse_args()
 
     started = datetime.now(timezone.utc)
-    args.log_dir.mkdir(parents=True, exist_ok=True)
+    args.log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    args.log_dir.chmod(0o700)
     stamp = started.strftime("%Y%m%dT%H%M%SZ")
     log_path = args.log_dir / f"{args.job}-{stamp}.log"
 
@@ -160,6 +164,7 @@ def main() -> int:
         output = f"sync_runner exception: {type(exc).__name__}: {exc}"
 
     log_path.write_text(output)
+    log_path.chmod(0o600)
     state = update_state(
         job=args.job,
         command=shlex.join(argv) if argv else args.command,

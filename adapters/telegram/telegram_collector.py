@@ -29,11 +29,13 @@ BRAIN_DIR = ROOT / "brain" / "telegram"
 
 
 def _atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.parent.chmod(0o700)
     with NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as temp:
         temp.write(content)
         temp_path = Path(temp.name)
     os.replace(temp_path, path)
+    path.chmod(0o600)
 
 
 def _peer_key(event: dict) -> str:
@@ -174,6 +176,7 @@ async def _sync_async(config_path: Path, mode: str, batch_size: int | None) -> d
         authorized_account_id,
         load_checkpoint,
         load_config,
+        recent_delete_events,
         save_checkpoint,
         utc_now,
     )
@@ -193,6 +196,14 @@ async def _sync_async(config_path: Path, mode: str, batch_size: int | None) -> d
             try:
                 entity = await _resolve_entity(client, peer)
                 checkpoint = load_checkpoint(peer)
+                if mode == "backfill" and checkpoint.get("backfill_complete") is True:
+                    outcomes.append({
+                        "peer_id": peer["raw_id"],
+                        "kind": peer["kind"],
+                        "mode": mode,
+                        "status": "complete",
+                    })
+                    continue
                 max_id = None
                 if mode == "backfill" and checkpoint.get("oldest_collected_id") is not None:
                     max_id = int(checkpoint["oldest_collected_id"])
@@ -205,9 +216,16 @@ async def _sync_async(config_path: Path, mode: str, batch_size: int | None) -> d
                     max_id=max_id,
                     config=config,
                 )
+                if mode == "recent":
+                    events.extend(recent_delete_events(peer, events))
                 written = append_events(events)
                 # Checkpoint follows successful raw persistence; it never advances first.
-                updated_checkpoint = save_checkpoint(peer, events, mode=mode)
+                updated_checkpoint = save_checkpoint(
+                    peer,
+                    events,
+                    mode=mode,
+                    backfill_complete=(len(events) < limit) if mode == "backfill" else None,
+                )
                 outcomes.append({
                     "peer_id": peer["raw_id"],
                     "kind": peer["kind"],
@@ -230,8 +248,22 @@ async def _sync_async(config_path: Path, mode: str, batch_size: int | None) -> d
             "mode": mode,
             "generated_at": utc_now(),
             "peers_attempted": len(outcomes),
-            "peers_ok": sum(1 for outcome in outcomes if outcome["status"] == "ok"),
-            "peers_error": sum(1 for outcome in outcomes if outcome["status"] != "ok"),
+            "peers_ok": sum(1 for outcome in outcomes if outcome["status"] in {"ok", "complete"}),
+            "peers_error": sum(1 for outcome in outcomes if outcome["status"] == "error"),
+            "backfill_complete": sum(
+                1
+                for outcome in outcomes
+                if outcome["status"] == "complete" or outcome.get("checkpoint", {}).get("backfill_complete") is True
+            ) if mode == "backfill" else None,
+            "backfill_remaining": sum(
+                1
+                for outcome in outcomes
+                if outcome["status"] == "error"
+                or (
+                    outcome["status"] == "ok"
+                    and outcome.get("checkpoint", {}).get("backfill_complete") is not True
+                )
+            ) if mode == "backfill" else None,
             "outcomes": outcomes,
         }
     finally:
@@ -283,7 +315,10 @@ def main() -> int:
         return 0
     if args.command == "sync":
         summary = asyncio.run(_sync_async(args.config, args.mode, args.batch_size))
-        _print_safe_summary({key: summary[key] for key in ("mode", "peers_attempted", "peers_ok", "peers_error")})
+        keys = ["mode", "peers_attempted", "peers_ok", "peers_error"]
+        if args.mode == "backfill":
+            keys.extend(["backfill_complete", "backfill_remaining"])
+        _print_safe_summary({key: summary[key] for key in keys})
         return 0
     if args.command == "render":
         _print_safe_summary(render_live_archive(source_id=args.source_id, raw_dir=args.raw_dir, brain_dir=args.brain_dir))
