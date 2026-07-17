@@ -1,4 +1,4 @@
-From f2f91607e780e98090a53a913f1d8708a38fca43 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:45:16 -0500
 Subject: [PATCH] feat(ingestion): add supervised single-owner source service
@@ -14,7 +14,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  scripts/run-verify-parallel.sh                |    6 +-
  src/cli.ts                                    |    2 +
  src/commands/serve-http.ts                    |  226 ++-
- src/commands/serve.ts                         |  150 +-
+ src/commands/serve.ts                         |  151 +-
  src/core/config.ts                            |   28 +
  src/core/engine.ts                            |    4 +
  src/core/import-file.ts                       |   30 +-
@@ -64,7 +64,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  test/serve-http-ingest-source-binding.test.ts |  152 ++
  test/serve-http-owner-lifecycle.test.ts       |  137 ++
  .../serve-http-startup-failure.serial.test.ts |   97 ++
- 59 files changed, 6825 insertions(+), 636 deletions(-)
+ 59 files changed, 6826 insertions(+), 636 deletions(-)
  create mode 100644 scripts/check-bun-version-sync.mjs
  create mode 100644 scripts/check-pglite-open-gates.ts
  create mode 100644 src/core/ingestion/config.ts
@@ -140,7 +140,7 @@ index 0e2ad180..d50ba5fd 100644
  
      "express/cookie-signature": ["cookie-signature@1.2.2", "", {}, "sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg=="],
 diff --git a/package.json b/package.json
-index fa980269..72bf96a2 100644
+index 6afa30f0..3ee0752a 100644
 --- a/package.json
 +++ b/package.json
 @@ -2,6 +2,7 @@
@@ -195,7 +195,7 @@ index fa980269..72bf96a2 100644
 +    "bun": "1.3.13"
    },
    "license": "MIT",
-   "version": "0.42.58.0"
+   "version": "0.42.61.0"
 diff --git a/scripts/check-bun-version-sync.mjs b/scripts/check-bun-version-sync.mjs
 new file mode 100644
 index 00000000..00ea6b04
@@ -512,10 +512,10 @@ index f03c560b..44a86b1f 100755
    ) &
    PIDS+=($!)
 diff --git a/src/cli.ts b/src/cli.ts
-index a5ca466f..1e2a9382 100755
+index 80a32455..748a2593 100755
 --- a/src/cli.ts
 +++ b/src/cli.ts
-@@ -611,6 +611,7 @@ async function runThinClientRouted(
+@@ -632,6 +632,7 @@ async function runThinClientRouted(
  // ============================================================================
  
  export interface BrainIdentity {
@@ -523,7 +523,7 @@ index a5ca466f..1e2a9382 100755
    version: string;
    engine: 'postgres' | 'pglite';
    page_count: number;
-@@ -2332,6 +2333,7 @@ ADMIN
+@@ -2353,6 +2354,7 @@ ADMIN
          [--json]                     (git-tracked vs supabase-only)
    serve                              MCP server (stdio)
    serve --http [--port N]            HTTP MCP server with OAuth 2.1
@@ -532,7 +532,7 @@ index a5ca466f..1e2a9382 100755
      --enable-dcr                     Enable Dynamic Client Registration (DCR clients default to authorization_code)
      --enable-dcr-insecure            Also allow the consent-bypassing client_credentials grant on DCR (implies --enable-dcr)
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index 5a053946..7a2e7669 100644
+index ee8da69b..0aa2f0ba 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
 @@ -23,6 +23,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
@@ -553,8 +553,8 @@ index 5a053946..7a2e7669 100644
  import {
    computeContentHash,
    validateIngestionEvent,
-@@ -90,6 +94,108 @@ export function resolveBootstrapToken(
-   return { kind: 'ok', token: trimmed, fromEnv: true };
+@@ -110,6 +114,108 @@ export function shouldSuppressBootstrapPrint(opts: {
+   return !opts.isTty;
  }
  
 +export type IngestSourceBindingResolution =
@@ -662,7 +662,7 @@ index 5a053946..7a2e7669 100644
  export type ProbeHealthResult =
    | { ok: true; status: 200; body: { status: 'ok'; version: string; engine: string; [k: string]: unknown } }
    | { ok: false; status: 503; body: { error: 'service_unavailable'; error_description: string } };
-@@ -255,7 +361,7 @@ export function resolveCorsOrigin(allowlist: Set<string> | null): cors.CorsOptio
+@@ -275,7 +381,7 @@ export function resolveCorsOrigin(allowlist: Set<string> | null): cors.CorsOptio
    };
  }
  
@@ -671,16 +671,16 @@ index 5a053946..7a2e7669 100644
    port: number;
    tokenTtl: number;
    enableDcr: boolean;
-@@ -304,6 +410,8 @@ interface ServeHttpOptions {
-    * tracking the regenerated value through other means.
+@@ -332,6 +438,8 @@ interface ServeHttpOptions {
+    * captured to a non-interactive log and accept the leak.
     */
-   suppressBootstrapToken?: boolean;
+   printAdminToken?: boolean;
 +  /** Optional owner-local ingestion health provider; lifecycle is owned by serve.ts. */
 +  ingestionService?: Pick<IngestionService, 'healthCheck'>;
  }
  
  /**
-@@ -524,8 +632,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -552,8 +660,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // and `--suppress-bootstrap-token`, no value reaches the log.
    const resolved = resolveBootstrapToken(process.env.GBRAIN_ADMIN_BOOTSTRAP_TOKEN);
    if (resolved.kind === 'error') {
@@ -690,7 +690,7 @@ index 5a053946..7a2e7669 100644
    }
    let bootstrapToken: string = resolved.token;
    let bootstrapFromEnv: boolean = resolved.fromEnv;
-@@ -948,6 +1055,18 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -981,6 +1088,18 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
      res.json({ revoked_sessions: count });
    });
  
@@ -709,7 +709,7 @@ index 5a053946..7a2e7669 100644
    app.get('/admin/api/agents', requireAdmin, async (_req: Request, res: Response) => {
      try {
        // Unified view: OAuth clients + legacy API keys
-@@ -1763,10 +1882,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -1806,10 +1925,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // content-type processors land.
    //
    // Events always carry untrusted_payload: true because the input came
@@ -723,7 +723,7 @@ index 5a053946..7a2e7669 100644
    // ---------------------------------------------------------------------------
    const ingestRateLimiter = rateLimit({
      windowMs: 10_000, // 10 seconds
-@@ -1890,8 +2008,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -1933,8 +2051,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        const content = body.toString('utf8');
        const contentHash = computeContentHash(content);
        const sourceUri = (req.header('x-gbrain-source-uri') || `mcp-webhook:${authInfo.clientId}:${Date.now()}`).slice(0, 1024);
@@ -761,7 +761,7 @@ index 5a053946..7a2e7669 100644
  
        const event: IngestionEvent = {
          source_id: sourceId,
-@@ -1909,6 +2054,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -1952,6 +2097,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
            ...(callerSlug ? { slug: callerSlug } : {}),
          },
        };
@@ -771,7 +771,7 @@ index 5a053946..7a2e7669 100644
  
        const validationErr = validateIngestionEvent(event);
        if (validationErr) {
-@@ -1921,23 +2069,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -1964,23 +2112,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        }
  
        try {
@@ -808,7 +808,7 @@ index 5a053946..7a2e7669 100644
  
          const latency = Date.now() - startTime;
          try {
-@@ -1966,10 +2114,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2009,10 +2157,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          });
        } catch (err) {
          const msg = err instanceof Error ? err.message : String(err);
@@ -822,7 +822,7 @@ index 5a053946..7a2e7669 100644
          });
        }
  
-@@ -1984,7 +2132,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2027,7 +2175,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          if (!res.headersSent) {
            res.status(500).json({
              error: 'internal_error',
@@ -831,7 +831,7 @@ index 5a053946..7a2e7669 100644
            });
          }
        }
-@@ -2148,12 +2296,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2191,12 +2339,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // ---------------------------------------------------------------------------
    const clientCount = await sql`SELECT count(*)::int as count FROM oauth_clients`;
  
@@ -857,7 +857,7 @@ index 5a053946..7a2e7669 100644
  ║  Bind:      ${bind.padEnd(40)}║
  ║  Engine:    ${(config.engine || 'pglite').padEnd(40)}║
  ║  Issuer:    ${issuerUrl.origin.padEnd(40)}║
-@@ -2162,9 +2321,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2205,9 +2364,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
  ║  Skills:    ${skillStatus.bannerValue.padEnd(40)}║
  ║  Token TTL: ${(tokenTtl + 's').padEnd(40)}║
  ╠══════════════════════════════════════════════════════╣
@@ -868,10 +868,10 @@ index 5a053946..7a2e7669 100644
 +║  MCP:       http://localhost:${listeningPort}/mcp${' '.repeat(Math.max(0, 21 - String(listeningPort).length))}║
 +║  Health:    http://localhost:${listeningPort}/health${' '.repeat(Math.max(0, 18 - String(listeningPort).length))}║
  ╠══════════════════════════════════════════════════════╣
- ${suppressBootstrapPrint
-   ? '║  Admin Token: suppressed (--suppress-bootstrap-token) ║\n╚══════════════════════════════════════════════════════╝'
-@@ -2172,5 +2331,10 @@ ${suppressBootstrapPrint
-     ? '║  Admin Token: from $GBRAIN_ADMIN_BOOTSTRAP_TOKEN     ║\n╚══════════════════════════════════════════════════════╝'
+ ${bootstrapFromEnv
+   ? '║  Admin Token: from $GBRAIN_ADMIN_BOOTSTRAP_TOKEN     ║\n╚══════════════════════════════════════════════════════╝'
+@@ -2215,5 +2374,10 @@ ${bootstrapFromEnv
+     ? '║  Admin Token: hidden (non-TTY log-leak guard)        ║\n║  set $GBRAIN_ADMIN_BOOTSTRAP_TOKEN, or pass          ║\n║  --print-admin-token on a trusted terminal.          ║\n╚══════════════════════════════════════════════════════╝'
      : `║  Admin Token (paste into /admin login):              ║\n║  ${bootstrapToken.substring(0, 50)}  ║\n║  ${bootstrapToken.substring(50).padEnd(50)}  ║\n╚══════════════════════════════════════════════════════╝`}
  `);
 +      resolve(candidate);
@@ -882,7 +882,7 @@ index 5a053946..7a2e7669 100644
 +  return server;
  }
 diff --git a/src/commands/serve.ts b/src/commands/serve.ts
-index de7352dc..703b32ed 100644
+index b69a930e..f171080a 100644
 --- a/src/commands/serve.ts
 +++ b/src/commands/serve.ts
 @@ -1,5 +1,8 @@
@@ -908,7 +908,7 @@ index de7352dc..703b32ed 100644
  export interface ServeOptions {
    // Test seam — defaults to the live process. The lifecycle plumbing reads
    // these for stdin EOF detection, signal handlers, and exit, so unit
-@@ -63,6 +73,11 @@ export interface ServeOptions {
+@@ -67,6 +77,11 @@ export interface ServeOptions {
    // transport.onclose still cover legitimate shutdown.
    // Defaults to `process.env.MCP_STDIO === '1'` when omitted.
    mcpStdio?: boolean;
@@ -920,7 +920,7 @@ index de7352dc..703b32ed 100644
  }
  
  export async function runServe(
-@@ -80,7 +95,8 @@ export async function runServe(
+@@ -84,7 +99,8 @@ export async function runServe(
  
    if (isHttp) {
      const portIdx = args.indexOf('--port');
@@ -930,14 +930,19 @@ index de7352dc..703b32ed 100644
  
      const ttlIdx = args.indexOf('--token-ttl');
      const tokenTtl = ttlIdx >= 0 ? parseInt(args[ttlIdx + 1]) || 3600 : 3600;
-@@ -117,9 +133,48 @@ export async function runServe(
+@@ -121,14 +137,54 @@ export async function runServe(
      // want the value leaking into log aggregators on every supervisor
      // restart.
      const suppressBootstrapToken = args.includes('--suppress-bootstrap-token');
 +    const withIngestion = args.includes('--with-ingestion');
  
+     // #2624: by default the generated token only prints on an interactive
+     // TTY (never into container log storage). --print-admin-token forces the
+     // raw value even on a non-TTY start.
+     const printAdminToken = args.includes('--print-admin-token');
+ 
 -    const { runServeHttp } = await import('./serve-http.ts');
--    await runServeHttp(engine, { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, logFullParams, bind, suppressBootstrapToken });
+-    await runServeHttp(engine, { port, tokenTtl, enableDcr, enableDcrInsecure, publicUrl, logFullParams, bind, suppressBootstrapToken, printAdminToken });
 +    let ingestionService: IngestionLifecycle | undefined;
 +    try {
 +      if (withIngestion) {
@@ -970,6 +975,7 @@ index de7352dc..703b32ed 100644
 +        logFullParams,
 +        bind,
 +        suppressBootstrapToken,
++        printAdminToken,
 +        ...(ingestionService ? { ingestionService } : {}),
 +      });
 +      installHttpOwnerLifecycle(engine, server, ingestionService, opts);
@@ -981,7 +987,7 @@ index de7352dc..703b32ed 100644
      return;
    }
  
-@@ -141,6 +196,95 @@ export async function runServe(
+@@ -150,6 +206,95 @@ export async function runServe(
    // hooks from being able to call process.exit() cleanly.
  }
  
@@ -1078,10 +1084,10 @@ index de7352dc..703b32ed 100644
    stdin: NodeJS.ReadableStream & { isTTY?: boolean };
    signals: Pick<NodeJS.Process, 'on'>;
 diff --git a/src/core/config.ts b/src/core/config.ts
-index 8a79b0e0..2af80289 100644
+index 2377fd42..3625602a 100644
 --- a/src/core/config.ts
 +++ b/src/core/config.ts
-@@ -120,6 +120,14 @@ export interface GBrainConfig {
+@@ -129,6 +129,14 @@ export interface GBrainConfig {
      scrub_pii?: boolean;
    };
  
@@ -1096,7 +1102,7 @@ index 8a79b0e0..2af80289 100644
    /**
     * v0.42 — self-upgrade settings (file plane; read on the hot path before any
     * DB connect, so it must live here, not the DB plane). `mode` is the only
-@@ -344,6 +352,26 @@ export interface GBrainConfig {
+@@ -353,6 +361,26 @@ export interface GBrainConfig {
    };
  }
  
@@ -1124,10 +1130,10 @@ index 8a79b0e0..2af80289 100644
   * True when this install is configured as a thin client of a remote
   * `gbrain serve --http`. Single source of truth for the "is this a
 diff --git a/src/core/engine.ts b/src/core/engine.ts
-index 822fa209..d3f47936 100644
+index 4a8d2704..26b60f5a 100644
 --- a/src/core/engine.ts
 +++ b/src/core/engine.ts
-@@ -2001,6 +2001,10 @@ export interface BrainEngine {
+@@ -2011,6 +2011,10 @@ export interface BrainEngine {
      sourceId: string,
    ): Promise<{ migrated: number }>;
  
@@ -1139,7 +1145,7 @@ index 822fa209..d3f47936 100644
    getConfig(key: string): Promise<string | null>;
    setConfig(key: string, value: string): Promise<void>;
 diff --git a/src/core/import-file.ts b/src/core/import-file.ts
-index cbf2d03a..9ef0d119 100644
+index 4e7722ab..30dee762 100644
 --- a/src/core/import-file.ts
 +++ b/src/core/import-file.ts
 @@ -36,7 +36,7 @@ import {
@@ -1151,7 +1157,7 @@ index cbf2d03a..9ef0d119 100644
  import { computeCorpusGeneration } from './contextual-retrieval-service.ts';
  import { runGuardrails } from './guardrails.ts';
  
-@@ -186,6 +186,8 @@ export interface ImportResult {
+@@ -197,6 +197,8 @@ export interface ImportResult {
    status: 'imported' | 'skipped' | 'error';
    chunks: number;
    error?: string;
@@ -1160,7 +1166,7 @@ index cbf2d03a..9ef0d119 100644
    /**
     * Parsed page content. Present for status='imported' AND status='skipped'
     * (skip happens when content is identical to existing page; auto-link still
-@@ -247,6 +249,12 @@ export async function importFromContent(
+@@ -258,6 +260,12 @@ export async function importFromContent(
       * the version bump.
       */
      forceRechunk?: boolean;
@@ -1173,7 +1179,7 @@ index cbf2d03a..9ef0d119 100644
      /**
       * v0.39.0.0 T1.5: active schema pack for type inference. When set, parseMarkdown
       * uses the pack's path_prefixes instead of the hardcoded gbrain-base table.
-@@ -284,6 +292,7 @@ export async function importFromContent(
+@@ -295,6 +303,7 @@ export async function importFromContent(
      remote?: boolean;
    } = {},
  ): Promise<ImportResult> {
@@ -1181,7 +1187,7 @@ index cbf2d03a..9ef0d119 100644
    // v0.18.0+ multi-source: when caller is syncing under a non-default source,
    // every per-page tx call must carry `sourceId` so writes target the right
    // (source_id, slug) row. Pre-fix, putPage relied on the schema DEFAULT and
-@@ -560,7 +569,13 @@ export async function importFromContent(
+@@ -571,7 +580,13 @@ export async function importFromContent(
  
    const existing = await engine.getPage(slug, sourceId ? { sourceId } : undefined);
    if (existing?.content_hash === hash && !opts.forceRechunk) {
@@ -1196,7 +1202,7 @@ index cbf2d03a..9ef0d119 100644
    }
  
    // v0.41.13 (#1309) — identity-based cross-slug dedup pre-check.
-@@ -587,7 +602,7 @@ export async function importFromContent(
+@@ -598,7 +613,7 @@ export async function importFromContent(
    // via the `?.` shape — no failure mode for fake engines.
    const fmId = (parsed.frontmatter as Record<string, unknown> | undefined)?.id;
    const fmIdStr = typeof fmId === 'string' && fmId.length > 0 ? fmId : null;
@@ -1205,7 +1211,7 @@ index cbf2d03a..9ef0d119 100644
      let dup: { slug: string; id: number } | null = null;
      try {
        dup = await engine.findDuplicatePage(sourceId ?? 'default', {
-@@ -613,7 +628,13 @@ export async function importFromContent(
+@@ -624,7 +639,13 @@ export async function importFromContent(
            `(frontmatter.id=${fmIdStr}) in source ${sourceId ?? 'default'}. ` +
            `Pass --force-rechunk to override.\n`
          );
@@ -1220,7 +1226,7 @@ index cbf2d03a..9ef0d119 100644
        }
        // Same content_hash, different (or missing) frontmatter.id.
        // Surface a warning but proceed with the insert — they may be
-@@ -887,6 +908,7 @@ export async function importFromContent(
+@@ -898,6 +919,7 @@ export async function importFromContent(
      slug,
      status: 'imported',
      chunks: chunks.length,
@@ -4743,7 +4749,7 @@ index e935afe8..da0db25e 100644
    // v12: scheduler polish
    /**
 diff --git a/src/core/operations.ts b/src/core/operations.ts
-index e8d28913..213c0668 100644
+index 82f1d8e0..4da14a82 100644
 --- a/src/core/operations.ts
 +++ b/src/core/operations.ts
 @@ -28,6 +28,7 @@ import type { SearchResult } from './types.ts';
@@ -4754,7 +4760,7 @@ index e8d28913..213c0668 100644
  import {
    GET_RECENT_SALIENCE_DESCRIPTION,
    FIND_ANOMALIES_DESCRIPTION,
-@@ -2216,10 +2217,13 @@ const get_health: Operation = {
+@@ -2246,10 +2247,13 @@ const get_health: Operation = {
   */
  const get_brain_identity: Operation = {
    name: 'get_brain_identity',
@@ -4770,7 +4776,7 @@ index e8d28913..213c0668 100644
      // v0.42 self-upgrade: surface a pending update on the thin-client banner
      // (bonus channel; the CLI stderr marker + `gbrain self-upgrade` are the
      // load-bearing surface). Cache-read-only, no network, fail-open.
-@@ -2236,6 +2240,7 @@ const get_brain_identity: Operation = {
+@@ -2266,6 +2270,7 @@ const get_brain_identity: Operation = {
        /* never let the banner break the op */
      }
      return {
@@ -4779,7 +4785,7 @@ index e8d28913..213c0668 100644
        engine: ctx.engine.kind,
        page_count: stats.page_count,
 diff --git a/src/core/pglite-engine.ts b/src/core/pglite-engine.ts
-index 72b9e741..9597b734 100644
+index 7dab6707..0b206c27 100644
 --- a/src/core/pglite-engine.ts
 +++ b/src/core/pglite-engine.ts
 @@ -64,6 +64,7 @@ import {
@@ -4790,7 +4796,7 @@ index 72b9e741..9597b734 100644
  type PGLiteDB = PGlite;
  
  // Tier 3 snapshot fast-restore. Reads a tar dump produced by
-@@ -5204,6 +5205,17 @@ export class PGLiteEngine implements BrainEngine {
+@@ -5269,6 +5270,17 @@ export class PGLiteEngine implements BrainEngine {
      );
    }
  
@@ -4831,7 +4837,7 @@ index a632fcc6..0eef4289 100644
  -- Minion Jobs: BullMQ-inspired Postgres-native job queue
  -- ============================================================
 diff --git a/src/core/postgres-engine.ts b/src/core/postgres-engine.ts
-index 19131c73..3cca461a 100644
+index a55487ad..5cdeb47e 100644
 --- a/src/core/postgres-engine.ts
 +++ b/src/core/postgres-engine.ts
 @@ -24,6 +24,7 @@ import { normalizeWeightForStorage } from './takes-fence.ts';
@@ -4842,7 +4848,7 @@ index 19131c73..3cca461a 100644
  import { SCHEMA_SQL } from './schema-embedded.ts';
  import { verifySchema } from './schema-verify.ts';
  import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
-@@ -5208,6 +5209,18 @@ export class PostgresEngine implements BrainEngine {
+@@ -5267,6 +5268,18 @@ export class PostgresEngine implements BrainEngine {
      );
    }
  
@@ -5287,7 +5293,7 @@ index 54aa82c0..791bdcc0 100644
      }
 diff --git a/test/ingestion/config.test.ts b/test/ingestion/config.test.ts
 new file mode 100644
-index 00000000..1dc9cef5
+index 00000000..198dc570
 --- /dev/null
 +++ b/test/ingestion/config.test.ts
 @@ -0,0 +1,281 @@
@@ -9347,3 +9353,6 @@ index 00000000..c17c8a57
 +    expect(disconnects()).toBe(1);
 +  });
 +});
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,4 +1,4 @@
-From d31ce55e49837d70f8f82348958c01ac920d3e88 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 22:21:02 -0500
 Subject: [PATCH] feat(auth): scope legacy bearer tokens

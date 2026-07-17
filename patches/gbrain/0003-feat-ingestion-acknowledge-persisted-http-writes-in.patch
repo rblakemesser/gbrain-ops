@@ -1,4 +1,4 @@
-From 821c1726bf5f9909938f31a31cd4925105ca3d28 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 19:26:56 -0500
 Subject: [PATCH] feat(ingestion): acknowledge persisted HTTP writes in owner
@@ -14,13 +14,13 @@ Subject: [PATCH] feat(ingestion): acknowledge persisted HTTP writes in owner
  7 files changed, 139 insertions(+), 5 deletions(-)
 
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index 7a2e7669..56d42709 100644
+index 0aa2f0ba..f424fc6f 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
-@@ -410,8 +410,8 @@ export interface ServeHttpOptions {
-    * tracking the regenerated value through other means.
+@@ -438,8 +438,8 @@ export interface ServeHttpOptions {
+    * captured to a non-interactive log and accept the leak.
     */
-   suppressBootstrapToken?: boolean;
+   printAdminToken?: boolean;
 -  /** Optional owner-local ingestion health provider; lifecycle is owned by serve.ts. */
 -  ingestionService?: Pick<IngestionService, 'healthCheck'>;
 +  /** Optional owner-local ingestion health and persisted-submit provider; lifecycle is owned by serve.ts. */
@@ -28,7 +28,7 @@ index 7a2e7669..56d42709 100644
  }
  
  /**
-@@ -2068,6 +2068,56 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2111,6 +2111,56 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          return;
        }
  
@@ -86,7 +86,7 @@ index 7a2e7669..56d42709 100644
          const submission = await submitIngestCapture(
            ingestQueue,
 diff --git a/src/commands/serve.ts b/src/commands/serve.ts
-index 703b32ed..be546b0e 100644
+index f171080a..6c096ba0 100644
 --- a/src/commands/serve.ts
 +++ b/src/commands/serve.ts
 @@ -26,7 +26,7 @@ export interface HttpServerHandle {

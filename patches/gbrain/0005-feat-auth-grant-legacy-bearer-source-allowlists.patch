@@ -1,4 +1,4 @@
-From a691fc02fc220d6d9564cac75d381881282ade55 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 22:37:37 -0500
 Subject: [PATCH] feat(auth): grant legacy bearer source allowlists
@@ -144,3 +144,4 @@ index 5e28150a..6ab02b32 100644
  });
 -- 
 2.50.1 (Apple Git-155)
+

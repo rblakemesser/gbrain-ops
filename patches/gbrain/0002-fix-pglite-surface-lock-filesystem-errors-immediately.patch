@@ -1,4 +1,4 @@
-From 731bf1819ad5e445c3778788d0f16f9ea3a2d8f5 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:49:33 -0500
 Subject: [PATCH] fix(pglite): surface lock filesystem errors immediately
@@ -64,3 +64,6 @@ index 5d2f472b..f3a141a9 100644
    test('prevents concurrent lock acquisition', async () => {
      const lock1 = await acquireLock(TEST_DIR, { timeoutMs: 2000 });
      expect(lock1.acquired).toBe(true);
+-- 
+2.50.1 (Apple Git-155)
+
