@@ -1,7 +1,8 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 52fc733c3315761abc6f1d84ef8695e6b2f0822a Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:45:16 -0500
-Subject: [PATCH] feat(ingestion): add supervised single-owner source service
+Subject: [PATCH 1/5] feat(ingestion): add supervised single-owner source
+ service
 
 Add declarative source configuration, command-archive adapters, acknowledged ingestion, source/root confinement, persistent brain identity, HTTP owner lifecycle, and open-gate verification.\n\nThis commit is carried by gbrain-ops until the generic product seams are upstreamed.
 ---
@@ -29,7 +30,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  src/core/ingestion/test-harness.ts            |   62 +-
  src/core/ingestion/types.ts                   |  134 +-
  src/core/migrate.ts                           |   19 +
- src/core/minions/handlers/ingest-capture.ts   |  111 +-
+ src/core/minions/handlers/ingest-capture.ts   |  128 +-
  src/core/minions/queue.ts                     |   23 +
  src/core/minions/types.ts                     |    2 +
  src/core/operations.ts                        |    9 +-
@@ -58,13 +59,13 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  .../ingestion/sources/command-archive.test.ts |  964 +++++++++++
  test/ingestion/test-harness.test.ts           |  109 ++
  test/longmemeval-harness.test.ts              |   24 +
- test/migration-v123-brain-identity.test.ts    |   36 +
+ test/migration-v124-brain-identity.test.ts    |   36 +
  test/minions.test.ts                          |   25 +
  test/pglite-open-gates.test.ts                |  148 ++
  test/serve-http-ingest-source-binding.test.ts |  152 ++
  test/serve-http-owner-lifecycle.test.ts       |  137 ++
  .../serve-http-startup-failure.serial.test.ts |   97 ++
- 59 files changed, 6826 insertions(+), 636 deletions(-)
+ 59 files changed, 6820 insertions(+), 659 deletions(-)
  create mode 100644 scripts/check-bun-version-sync.mjs
  create mode 100644 scripts/check-pglite-open-gates.ts
  create mode 100644 src/core/ingestion/config.ts
@@ -76,7 +77,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  create mode 100644 test/ingestion/service.test.ts
  create mode 100644 test/ingestion/sources/command-archive.test.ts
  create mode 100644 test/longmemeval-harness.test.ts
- create mode 100644 test/migration-v123-brain-identity.test.ts
+ create mode 100644 test/migration-v124-brain-identity.test.ts
  create mode 100644 test/pglite-open-gates.test.ts
  create mode 100644 test/serve-http-ingest-source-binding.test.ts
  create mode 100644 test/serve-http-owner-lifecycle.test.ts
@@ -104,7 +105,7 @@ index ebc68cd9..664953a4 100644
  ## Project structure
  
 diff --git a/bun.lock b/bun.lock
-index 0e2ad180..d50ba5fd 100644
+index d7a03e8d..ff8250a9 100644
 --- a/bun.lock
 +++ b/bun.lock
 @@ -36,12 +36,11 @@
@@ -121,7 +122,7 @@ index 0e2ad180..d50ba5fd 100644
          "fast-check": "^4.8.0",
          "typescript": "^5.6.0",
        },
-@@ -265,8 +264,6 @@
+@@ -278,8 +277,6 @@
  
      "@types/body-parser": ["@types/body-parser@1.19.6", "", { "dependencies": { "@types/connect": "*", "@types/node": "*" } }, "sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g=="],
  
@@ -130,17 +131,17 @@ index 0e2ad180..d50ba5fd 100644
      "@types/connect": ["@types/connect@3.4.38", "", { "dependencies": { "@types/node": "*" } }, "sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug=="],
  
      "@types/cookie-parser": ["@types/cookie-parser@1.4.10", "", { "peerDependencies": { "@types/express": "*" } }, "sha512-B4xqkqfZ8Wek+rCOeRxsjMS9OgvzebEzzLYw7NHYuvzb7IdxOkI0ZHGgeEBX4PUM7QGVvNSK60T3OvWj3YfBRg=="],
-@@ -593,8 +590,6 @@
+@@ -612,8 +609,6 @@
  
      "@modelcontextprotocol/sdk/express-rate-limit": ["express-rate-limit@8.3.2", "", { "dependencies": { "ip-address": "10.1.0" }, "peerDependencies": { "express": ">= 4.11" } }, "sha512-77VmFeJkO0/rvimEDuUC5H30oqUC4EyOhyGccfqoLebB0oiEYfM7nwPrsDsBL1gsTpwfzX8SFy2MT3TDyRq+bg=="],
  
 -    "@types/bun/bun-types": ["bun-types@1.3.11", "", { "dependencies": { "@types/node": "*" } }, "sha512-1KGPpoxQWl9f6wcZh57LvrPIInQMn2TQ7jsgxqpRzg+l0QPOFvJVH7HmvHo/AiPgwXy+/Thf6Ov3EdVn1vOabg=="],
 -
-     "eventsource/eventsource-parser": ["eventsource-parser@3.0.6", "", {}, "sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg=="],
+     "es-set-tostringtag/hasown": ["hasown@2.0.2", "", { "dependencies": { "function-bind": "^1.1.2" } }, "sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ=="],
  
-     "express/cookie-signature": ["cookie-signature@1.2.2", "", {}, "sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg=="],
+     "eventsource/eventsource-parser": ["eventsource-parser@3.0.6", "", {}, "sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg=="],
 diff --git a/package.json b/package.json
-index 6afa30f0..3ee0752a 100644
+index a14d42ce..18fa3118 100644
 --- a/package.json
 +++ b/package.json
 @@ -2,6 +2,7 @@
@@ -195,7 +196,7 @@ index 6afa30f0..3ee0752a 100644
 +    "bun": "1.3.13"
    },
    "license": "MIT",
-   "version": "0.42.61.0"
+   "version": "0.42.62.0",
 diff --git a/scripts/check-bun-version-sync.mjs b/scripts/check-bun-version-sync.mjs
 new file mode 100644
 index 00000000..00ea6b04
@@ -512,7 +513,7 @@ index f03c560b..44a86b1f 100755
    ) &
    PIDS+=($!)
 diff --git a/src/cli.ts b/src/cli.ts
-index 80a32455..748a2593 100755
+index 53622bb0..7efaea74 100755
 --- a/src/cli.ts
 +++ b/src/cli.ts
 @@ -632,6 +632,7 @@ async function runThinClientRouted(
@@ -523,7 +524,7 @@ index 80a32455..748a2593 100755
    version: string;
    engine: 'postgres' | 'pglite';
    page_count: number;
-@@ -2353,6 +2354,7 @@ ADMIN
+@@ -2372,6 +2373,7 @@ ADMIN
          [--json]                     (git-tracked vs supabase-only)
    serve                              MCP server (stdio)
    serve --http [--port N]            HTTP MCP server with OAuth 2.1
@@ -1084,7 +1085,7 @@ index b69a930e..f171080a 100644
    stdin: NodeJS.ReadableStream & { isTTY?: boolean };
    signals: Pick<NodeJS.Process, 'on'>;
 diff --git a/src/core/config.ts b/src/core/config.ts
-index 2377fd42..3625602a 100644
+index 4ca00cdc..5e8c77c0 100644
 --- a/src/core/config.ts
 +++ b/src/core/config.ts
 @@ -129,6 +129,14 @@ export interface GBrainConfig {
@@ -1102,7 +1103,7 @@ index 2377fd42..3625602a 100644
    /**
     * v0.42 — self-upgrade settings (file plane; read on the hot path before any
     * DB connect, so it must live here, not the DB plane). `mode` is the only
-@@ -353,6 +361,26 @@ export interface GBrainConfig {
+@@ -355,6 +363,26 @@ export interface GBrainConfig {
    };
  }
  
@@ -4496,15 +4497,15 @@ index 4935913d..72a98f0b 100644
  export function validateIngestionEvent(event: unknown): IngestionEventError | null {
    if (event === null || typeof event !== 'object') {
 diff --git a/src/core/migrate.ts b/src/core/migrate.ts
-index c9c3a158..efa496ee 100644
+index 7b95a576..ce286d08 100644
 --- a/src/core/migrate.ts
 +++ b/src/core/migrate.ts
-@@ -5505,6 +5505,25 @@ export const MIGRATIONS: Migration[] = [
-         WHERE dimension IS NOT NULL;
-     `,
+@@ -5596,6 +5596,25 @@ export const MIGRATIONS: Migration[] = [
+       console.log(`  v123: trigger functions recreated with language='${lang}' + backfilled existing rows`);
+     },
    },
 +  {
-+    version: 123,
++    version: 124,
 +    name: 'brain_identity_singleton',
 +    // Durable store fingerprint for shared MCP clients and recovery/cutover
 +    // proof. A dedicated singleton table is intentionally not exposed through
@@ -4526,7 +4527,7 @@ index c9c3a158..efa496ee 100644
  
  export const LATEST_VERSION = MIGRATIONS.length > 0
 diff --git a/src/core/minions/handlers/ingest-capture.ts b/src/core/minions/handlers/ingest-capture.ts
-index 9cee1c16..9d50ae19 100644
+index 7bd60aaf..9d50ae19 100644
 --- a/src/core/minions/handlers/ingest-capture.ts
 +++ b/src/core/minions/handlers/ingest-capture.ts
 @@ -5,17 +5,10 @@
@@ -4661,23 +4662,46 @@ index 9cee1c16..9d50ae19 100644
  
      // For text-typed events, content is the inline markdown/text. For
      // binary types (image/audio/video/pdf), content is a path-or-URI that
-@@ -111,17 +141,28 @@ export function makeIngestCaptureHandler(engine: BrainEngine) {
+@@ -111,46 +141,28 @@ export function makeIngestCaptureHandler(engine: BrainEngine) {
      // embed runs as a separate Minion job (autopilot's embed phase OR an
      // explicit `gbrain embed --stale`). Callers can opt in to inline embed
      // by passing { noEmbed: false } in job.data.
 -    const noEmbed = (data as { noEmbed?: unknown }).noEmbed !== false;
+-
+-    // #1522: thread the validated event's provenance into the page write
+-    // instead of dropping it on the floor. source_kind / source_uri are
+-    // pure provenance strings (no scoping power) and persist
+-    // unconditionally via importFromContent's putPage write-through.
+-    //
+-    // event.source_id is the emitter's IngestionSource instance id, NOT
+-    // necessarily a registered brain source (the webhook path fabricates
+-    // `webhook-<clientId>`, which pages.source_id's FK would reject). It
+-    // routes the page write only when BOTH hold:
+-    //   - the event is trusted (fail-closed: an untrusted webhook payload
+-    //     carries a caller-controlled x-gbrain-source-id header and must
+-    //     not get to choose its write source), AND
+-    //   - the id names a registered source row.
+-    // Otherwise the write keeps the pre-fix default-source routing.
+-    let sourceId: string | undefined;
+-    if (!untrustedPayload) {
+-      const rows = await engine.executeRaw<{ id: string }>(
+-        `SELECT id FROM sources WHERE id = $1`,
+-        [event.source_id],
+-      );
+-      if (rows.length > 0) sourceId = event.source_id;
+-    }
 +    const noEmbed = data.noEmbed !== false;
  
--    const result = await importFromContent(engine, slug, event.content, { noEmbed });
-+    const result = await importFromContent(engine, slug, event.content, {
-+      noEmbed,
+     const result = await importFromContent(engine, slug, event.content, {
+       noEmbed,
+-      sourceId,
 +      sourceId: persistedSourceId,
-+      source_kind: event.source_kind,
-+      source_uri: event.source_uri,
-+      ingested_via: 'ingest_capture',
+       source_kind: event.source_kind,
+       source_uri: event.source_uri,
+       ingested_via: 'ingest_capture',
 +      remote: untrustedPayload,
 +      crossSlugDedup: false,
-+    });
+     });
  
      return {
 -      slug,
@@ -4736,7 +4760,7 @@ index e21eb8a4..2650c06c 100644
              `SELECT * FROM minion_jobs
               WHERE name = $1 AND queue = $2 AND status = 'waiting'
 diff --git a/src/core/minions/types.ts b/src/core/minions/types.ts
-index e935afe8..da0db25e 100644
+index 73877bb9..675619d7 100644
 --- a/src/core/minions/types.ts
 +++ b/src/core/minions/types.ts
 @@ -130,6 +130,8 @@ export interface MinionJobInput {
@@ -4749,7 +4773,7 @@ index e935afe8..da0db25e 100644
    // v12: scheduler polish
    /**
 diff --git a/src/core/operations.ts b/src/core/operations.ts
-index 82f1d8e0..4da14a82 100644
+index ab2d4cbf..b6a98826 100644
 --- a/src/core/operations.ts
 +++ b/src/core/operations.ts
 @@ -28,6 +28,7 @@ import type { SearchResult } from './types.ts';
@@ -4760,7 +4784,7 @@ index 82f1d8e0..4da14a82 100644
  import {
    GET_RECENT_SALIENCE_DESCRIPTION,
    FIND_ANOMALIES_DESCRIPTION,
-@@ -2246,10 +2247,13 @@ const get_health: Operation = {
+@@ -2256,10 +2257,13 @@ const get_health: Operation = {
   */
  const get_brain_identity: Operation = {
    name: 'get_brain_identity',
@@ -4776,7 +4800,7 @@ index 82f1d8e0..4da14a82 100644
      // v0.42 self-upgrade: surface a pending update on the thin-client banner
      // (bonus channel; the CLI stderr marker + `gbrain self-upgrade` are the
      // load-bearing surface). Cache-read-only, no network, fail-open.
-@@ -2266,6 +2270,7 @@ const get_brain_identity: Operation = {
+@@ -2276,6 +2280,7 @@ const get_brain_identity: Operation = {
        /* never let the banner break the op */
      }
      return {
@@ -4785,10 +4809,10 @@ index 82f1d8e0..4da14a82 100644
        engine: ctx.engine.kind,
        page_count: stats.page_count,
 diff --git a/src/core/pglite-engine.ts b/src/core/pglite-engine.ts
-index 7dab6707..0b206c27 100644
+index 8239ec35..cd9da8cf 100644
 --- a/src/core/pglite-engine.ts
 +++ b/src/core/pglite-engine.ts
-@@ -64,6 +64,7 @@ import {
+@@ -65,6 +65,7 @@ import {
  } from './search/embedding-column.ts';
  import { hasCJK, escapeLikePattern } from './cjk.ts';
  
@@ -4796,7 +4820,7 @@ index 7dab6707..0b206c27 100644
  type PGLiteDB = PGlite;
  
  // Tier 3 snapshot fast-restore. Reads a tar dump produced by
-@@ -5269,6 +5270,17 @@ export class PGLiteEngine implements BrainEngine {
+@@ -5277,6 +5278,17 @@ export class PGLiteEngine implements BrainEngine {
      );
    }
  
@@ -4837,7 +4861,7 @@ index a632fcc6..0eef4289 100644
  -- Minion Jobs: BullMQ-inspired Postgres-native job queue
  -- ============================================================
 diff --git a/src/core/postgres-engine.ts b/src/core/postgres-engine.ts
-index a55487ad..5cdeb47e 100644
+index eafaf8bf..2534e5fb 100644
 --- a/src/core/postgres-engine.ts
 +++ b/src/core/postgres-engine.ts
 @@ -24,6 +24,7 @@ import { normalizeWeightForStorage } from './takes-fence.ts';
@@ -4848,8 +4872,8 @@ index a55487ad..5cdeb47e 100644
  import { SCHEMA_SQL } from './schema-embedded.ts';
  import { verifySchema } from './schema-verify.ts';
  import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
-@@ -5267,6 +5268,18 @@ export class PostgresEngine implements BrainEngine {
-     );
+@@ -5414,6 +5415,18 @@ export class PostgresEngine implements BrainEngine {
+     });
    }
  
 +  async getBrainId(): Promise<string> {
@@ -4865,8 +4889,8 @@ index a55487ad..5cdeb47e 100644
 +  }
 +
    async setConfig(key: string, value: string): Promise<void> {
-     const sql = this.sql;
-     await sql`
+     return this.connRetry(async () => {
+       await this.sql`
 diff --git a/src/core/schema-embedded.ts b/src/core/schema-embedded.ts
 index d576fd1b..3f30e43b 100644
 --- a/src/core/schema-embedded.ts
@@ -6813,7 +6837,7 @@ index 00000000..adf816bc
 +  }, 45_000);
 +});
 diff --git a/test/ingestion/ingest-capture.test.ts b/test/ingestion/ingest-capture.test.ts
-index 4898024f..c32aa14f 100644
+index 3262ada3..b741a322 100644
 --- a/test/ingestion/ingest-capture.test.ts
 +++ b/test/ingestion/ingest-capture.test.ts
 @@ -16,6 +16,7 @@ import {
@@ -6926,7 +6950,7 @@ index 4898024f..c32aa14f 100644
    test('trusted (default) payload round-trips as false', async () => {
      const handler = makeIngestCaptureHandler(engine);
      const ev = makeEvent({ content: 'trusted' });
-@@ -163,6 +214,16 @@ describe('ingest_capture handler — validation + routing', () => {
+@@ -227,6 +278,16 @@ describe('ingest_capture handler — provenance write-through (#1522)', () => {
  });
  
  describe('ingest_capture handler — integration with importFromContent', () => {
@@ -6943,7 +6967,7 @@ index 4898024f..c32aa14f 100644
    test('imported event lands as a page in the DB', async () => {
      const handler = makeIngestCaptureHandler(engine);
      const ev = makeEvent({
-@@ -171,9 +232,16 @@ describe('ingest_capture handler — integration with importFromContent', () =>
+@@ -235,9 +296,16 @@ describe('ingest_capture handler — integration with importFromContent', () =>
      const result = await handler(makeJob({ event: ev, slug: 'wiki/e2e-test' }));
      expect(result.status).toBe('imported');
  
@@ -6961,7 +6985,7 @@ index 4898024f..c32aa14f 100644
    });
  
    test('repeat ingest of same content returns skipped status (content_hash dedup at importFromContent level)', async () => {
-@@ -184,6 +252,29 @@ describe('ingest_capture handler — integration with importFromContent', () =>
+@@ -248,6 +316,29 @@ describe('ingest_capture handler — integration with importFromContent', () =>
  
      const result2 = await handler(makeJob({ event: ev, slug: 'wiki/stable' }));
      expect(result2.status).toBe('skipped');
@@ -8717,11 +8741,11 @@ index 00000000..f0d81e86
 +    });
 +  });
 +});
-diff --git a/test/migration-v123-brain-identity.test.ts b/test/migration-v123-brain-identity.test.ts
+diff --git a/test/migration-v124-brain-identity.test.ts b/test/migration-v124-brain-identity.test.ts
 new file mode 100644
-index 00000000..7eaa3518
+index 00000000..2407cf2a
 --- /dev/null
-+++ b/test/migration-v123-brain-identity.test.ts
++++ b/test/migration-v124-brain-identity.test.ts
 @@ -0,0 +1,36 @@
 +import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 +import { PGLiteEngine } from '../src/core/pglite-engine.ts';
@@ -8739,14 +8763,14 @@ index 00000000..7eaa3518
 +  await engine.disconnect();
 +});
 +
-+describe('migration v123 brain identity singleton', () => {
-+  test('creates one immutable store identity when upgrading from v122', async () => {
-+    expect(LATEST_VERSION).toBe(123);
++describe('migration v124 brain identity singleton', () => {
++  test('creates one immutable store identity when upgrading from v123', async () => {
++    expect(LATEST_VERSION).toBe(124);
 +    await engine.executeRaw('DROP TABLE brain_identity');
-+    await engine.setConfig('version', '122');
++    await engine.setConfig('version', '123');
 +
 +    const applied = await runMigrations(engine);
-+    expect(applied).toEqual({ applied: 1, current: 123 });
++    expect(applied).toEqual({ applied: 1, current: 124 });
 +    const firstId = await engine.getBrainId();
 +    expect(firstId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 +
@@ -8755,7 +8779,7 @@ index 00000000..7eaa3518
 +    );
 +    expect(rows).toEqual([{ singleton: true, brain_id: firstId }]);
 +
-+    expect(await runMigrations(engine)).toEqual({ applied: 0, current: 123 });
++    expect(await runMigrations(engine)).toEqual({ applied: 0, current: 124 });
 +    expect(await engine.getBrainId()).toBe(firstId);
 +  });
 +});

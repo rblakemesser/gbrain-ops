@@ -1,7 +1,8 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From fa8784bca4cf32302c938fb29615e8c8607f6a7f Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 19:26:56 -0500
-Subject: [PATCH] feat(ingestion): acknowledge persisted HTTP writes in owner
+Subject: [PATCH 3/5] feat(ingestion): acknowledge persisted HTTP writes in
+ owner
 
 ---
  src/commands/serve-http.ts                    | 54 +++++++++++++++++-
