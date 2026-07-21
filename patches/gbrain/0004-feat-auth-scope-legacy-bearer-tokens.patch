@@ -1,7 +1,7 @@
-From c136e50dba54ab720cc4ed611c22ab7a57b96382 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 22:21:02 -0500
-Subject: [PATCH 4/5] feat(auth): scope legacy bearer tokens
+Subject: [PATCH] feat(auth): scope legacy bearer tokens
 
 ---
  src/commands/auth.ts          | 31 ++++++++++++++++++++++---------

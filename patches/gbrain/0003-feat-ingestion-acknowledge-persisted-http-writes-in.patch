@@ -1,8 +1,7 @@
-From fa8784bca4cf32302c938fb29615e8c8607f6a7f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 19:26:56 -0500
-Subject: [PATCH 3/5] feat(ingestion): acknowledge persisted HTTP writes in
- owner
+Subject: [PATCH] feat(ingestion): acknowledge persisted HTTP writes in owner
 
 ---
  src/commands/serve-http.ts                    | 54 +++++++++++++++++-
@@ -121,10 +120,10 @@ index 0140a344..eb5a7fd6 100644
      if (this.state !== 'starting' && this.state !== 'running') {
        return Promise.resolve({
 diff --git a/test/ingestion/http-owner-vertical-slice.serial.test.ts b/test/ingestion/http-owner-vertical-slice.serial.test.ts
-index adf816bc..0b1f67a2 100644
+index f7e59d30..59ee27e9 100644
 --- a/test/ingestion/http-owner-vertical-slice.serial.test.ts
 +++ b/test/ingestion/http-owner-vertical-slice.serial.test.ts
-@@ -111,6 +111,25 @@ async function addReadOnlyToken(engine: PGLiteEngine): Promise<string> {
+@@ -131,6 +131,25 @@ async function addReadOnlyToken(engine: PGLiteEngine): Promise<string> {
    return token;
  }
  
@@ -150,7 +149,7 @@ index adf816bc..0b1f67a2 100644
  async function startOwner(
    engine: PGLiteEngine,
    cfg: GBrainConfig,
-@@ -195,11 +214,41 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
+@@ -216,11 +235,41 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
        });
        await engineOne.setConfig('search.mcp_keyword_only', 'true');
        const token = await addReadOnlyToken(engineOne);
@@ -193,7 +192,7 @@ index adf816bc..0b1f67a2 100644
        expect(first.versions).toBe(0);
        expect(first.chunks).toBeGreaterThan(0);
        expect(first.embeddings).toBe(first.chunks);
-@@ -210,6 +259,8 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
+@@ -231,6 +280,8 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
          expect(JSON.stringify(identity)).toContain(identityOne);
          const result = await clientOne.callTool({ name: 'search', arguments: { query: 'needle-ulysses-7419' } });
          expect(JSON.stringify(result)).toContain('needle-ulysses-7419');
@@ -202,7 +201,7 @@ index adf816bc..0b1f67a2 100644
          const denied = await clientOne.callTool({
            name: 'put_page',
            arguments: { slug: 'must-not-write', type: 'note', title: 'denied', compiled_truth: 'denied' },
-@@ -231,7 +282,7 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
+@@ -253,7 +304,7 @@ describe('collector → product owner → embedding → authenticated HTTP MCP',
  
        const ownerTwo = await startOwner(engineTwo, cfg);
        const changed = await waitForEmbedded(engineTwo);

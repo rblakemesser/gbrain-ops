@@ -1,8 +1,7 @@
-From 52fc733c3315761abc6f1d84ef8695e6b2f0822a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:45:16 -0500
-Subject: [PATCH 1/5] feat(ingestion): add supervised single-owner source
- service
+Subject: [PATCH] feat(ingestion): add supervised single-owner source service
 
 Add declarative source configuration, command-archive adapters, acknowledged ingestion, source/root confinement, persistent brain identity, HTTP owner lifecycle, and open-gate verification.\n\nThis commit is carried by gbrain-ops until the generic product seams are upstreamed.
 ---
@@ -50,7 +49,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  test/ingestion/daemon.test.ts                 |  477 +++++-
  test/ingestion/dedup.test.ts                  |  201 +--
  test/ingestion/gstack-learnings.test.ts       |    9 +
- .../http-owner-vertical-slice.serial.test.ts  |  268 +++
+ .../http-owner-vertical-slice.serial.test.ts  |  290 ++++
  test/ingestion/ingest-capture.test.ts         |  107 +-
  test/ingestion/markdown-greenfield.test.ts    |    9 +
  test/ingestion/migration-mode.test.ts         |   62 +-
@@ -59,13 +58,13 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  .../ingestion/sources/command-archive.test.ts |  964 +++++++++++
  test/ingestion/test-harness.test.ts           |  109 ++
  test/longmemeval-harness.test.ts              |   24 +
- test/migration-v124-brain-identity.test.ts    |   36 +
+ test/migration-v125-brain-identity.test.ts    |   36 +
  test/minions.test.ts                          |   25 +
  test/pglite-open-gates.test.ts                |  148 ++
  test/serve-http-ingest-source-binding.test.ts |  152 ++
  test/serve-http-owner-lifecycle.test.ts       |  137 ++
  .../serve-http-startup-failure.serial.test.ts |   97 ++
- 59 files changed, 6820 insertions(+), 659 deletions(-)
+ 59 files changed, 6842 insertions(+), 659 deletions(-)
  create mode 100644 scripts/check-bun-version-sync.mjs
  create mode 100644 scripts/check-pglite-open-gates.ts
  create mode 100644 src/core/ingestion/config.ts
@@ -77,7 +76,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  create mode 100644 test/ingestion/service.test.ts
  create mode 100644 test/ingestion/sources/command-archive.test.ts
  create mode 100644 test/longmemeval-harness.test.ts
- create mode 100644 test/migration-v124-brain-identity.test.ts
+ create mode 100644 test/migration-v125-brain-identity.test.ts
  create mode 100644 test/pglite-open-gates.test.ts
  create mode 100644 test/serve-http-ingest-source-binding.test.ts
  create mode 100644 test/serve-http-owner-lifecycle.test.ts
@@ -141,7 +140,7 @@ index d7a03e8d..ff8250a9 100644
  
      "eventsource/eventsource-parser": ["eventsource-parser@3.0.6", "", {}, "sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg=="],
 diff --git a/package.json b/package.json
-index a14d42ce..18fa3118 100644
+index 2f812de2..5b0454b0 100644
 --- a/package.json
 +++ b/package.json
 @@ -2,6 +2,7 @@
@@ -196,7 +195,7 @@ index a14d42ce..18fa3118 100644
 +    "bun": "1.3.13"
    },
    "license": "MIT",
-   "version": "0.42.62.0",
+   "version": "0.42.63.0",
 diff --git a/scripts/check-bun-version-sync.mjs b/scripts/check-bun-version-sync.mjs
 new file mode 100644
 index 00000000..00ea6b04
@@ -513,7 +512,7 @@ index f03c560b..44a86b1f 100755
    ) &
    PIDS+=($!)
 diff --git a/src/cli.ts b/src/cli.ts
-index 53622bb0..7efaea74 100755
+index 804d7dbf..b9682ea8 100755
 --- a/src/cli.ts
 +++ b/src/cli.ts
 @@ -632,6 +632,7 @@ async function runThinClientRouted(
@@ -524,7 +523,7 @@ index 53622bb0..7efaea74 100755
    version: string;
    engine: 'postgres' | 'pglite';
    page_count: number;
-@@ -2372,6 +2373,7 @@ ADMIN
+@@ -2403,6 +2404,7 @@ ADMIN
          [--json]                     (git-tracked vs supabase-only)
    serve                              MCP server (stdio)
    serve --http [--port N]            HTTP MCP server with OAuth 2.1
@@ -1131,10 +1130,10 @@ index 4ca00cdc..5e8c77c0 100644
   * True when this install is configured as a thin client of a remote
   * `gbrain serve --http`. Single source of truth for the "is this a
 diff --git a/src/core/engine.ts b/src/core/engine.ts
-index 4a8d2704..26b60f5a 100644
+index a389d309..49b8af22 100644
 --- a/src/core/engine.ts
 +++ b/src/core/engine.ts
-@@ -2011,6 +2011,10 @@ export interface BrainEngine {
+@@ -2032,6 +2032,10 @@ export interface BrainEngine {
      sourceId: string,
    ): Promise<{ migrated: number }>;
  
@@ -4497,15 +4496,15 @@ index 4935913d..72a98f0b 100644
  export function validateIngestionEvent(event: unknown): IngestionEventError | null {
    if (event === null || typeof event !== 'object') {
 diff --git a/src/core/migrate.ts b/src/core/migrate.ts
-index 7b95a576..ce286d08 100644
+index 124b79c8..942f6e90 100644
 --- a/src/core/migrate.ts
 +++ b/src/core/migrate.ts
-@@ -5596,6 +5596,25 @@ export const MIGRATIONS: Migration[] = [
-       console.log(`  v123: trigger functions recreated with language='${lang}' + backfilled existing rows`);
+@@ -5671,6 +5671,25 @@ export const MIGRATIONS: Migration[] = [
+ `);
      },
    },
 +  {
-+    version: 124,
++    version: 125,
 +    name: 'brain_identity_singleton',
 +    // Durable store fingerprint for shared MCP clients and recovery/cutover
 +    // proof. A dedicated singleton table is intentionally not exposed through
@@ -4719,7 +4718,7 @@ index 7bd60aaf..9d50ae19 100644
 -  };
  }
 diff --git a/src/core/minions/queue.ts b/src/core/minions/queue.ts
-index e21eb8a4..2650c06c 100644
+index ccf71cd9..ed15182f 100644
 --- a/src/core/minions/queue.ts
 +++ b/src/core/minions/queue.ts
 @@ -35,6 +35,21 @@ export interface TrustedSubmitOpts {
@@ -4744,7 +4743,7 @@ index e21eb8a4..2650c06c 100644
  const MIGRATION_VERSION = 7;
  
  const DEFAULT_MAX_SPAWN_DEPTH = 5;
-@@ -175,6 +190,14 @@ export class MinionQueue {
+@@ -186,6 +201,14 @@ export class MinionQueue {
          );
          const waitingCount = parseInt(waitingCountRows[0]?.count ?? '0', 10);
          if (waitingCount >= maxWaiting) {
@@ -4760,7 +4759,7 @@ index e21eb8a4..2650c06c 100644
              `SELECT * FROM minion_jobs
               WHERE name = $1 AND queue = $2 AND status = 'waiting'
 diff --git a/src/core/minions/types.ts b/src/core/minions/types.ts
-index 73877bb9..675619d7 100644
+index 7a1b5f08..8e7e6deb 100644
 --- a/src/core/minions/types.ts
 +++ b/src/core/minions/types.ts
 @@ -130,6 +130,8 @@ export interface MinionJobInput {
@@ -4809,10 +4808,10 @@ index ab2d4cbf..b6a98826 100644
        engine: ctx.engine.kind,
        page_count: stats.page_count,
 diff --git a/src/core/pglite-engine.ts b/src/core/pglite-engine.ts
-index 8239ec35..cd9da8cf 100644
+index 54efd087..f55d9c5b 100644
 --- a/src/core/pglite-engine.ts
 +++ b/src/core/pglite-engine.ts
-@@ -65,6 +65,7 @@ import {
+@@ -66,6 +66,7 @@ import {
  } from './search/embedding-column.ts';
  import { hasCJK, escapeLikePattern } from './cjk.ts';
  
@@ -4820,7 +4819,7 @@ index 8239ec35..cd9da8cf 100644
  type PGLiteDB = PGlite;
  
  // Tier 3 snapshot fast-restore. Reads a tar dump produced by
-@@ -5277,6 +5278,17 @@ export class PGLiteEngine implements BrainEngine {
+@@ -5415,6 +5416,17 @@ export class PGLiteEngine implements BrainEngine {
      );
    }
  
@@ -4839,7 +4838,7 @@ index 8239ec35..cd9da8cf 100644
    async getConfig(key: string): Promise<string | null> {
      const { rows } = await this.db.query('SELECT value FROM config WHERE key = $1', [key]);
 diff --git a/src/core/pglite-schema.ts b/src/core/pglite-schema.ts
-index a632fcc6..0eef4289 100644
+index a42837a7..5a067fc4 100644
 --- a/src/core/pglite-schema.ts
 +++ b/src/core/pglite-schema.ts
 @@ -432,6 +432,17 @@ INSERT INTO config (key, value) VALUES
@@ -4861,7 +4860,7 @@ index a632fcc6..0eef4289 100644
  -- Minion Jobs: BullMQ-inspired Postgres-native job queue
  -- ============================================================
 diff --git a/src/core/postgres-engine.ts b/src/core/postgres-engine.ts
-index eafaf8bf..2534e5fb 100644
+index b42f2a90..d2bc28e7 100644
 --- a/src/core/postgres-engine.ts
 +++ b/src/core/postgres-engine.ts
 @@ -24,6 +24,7 @@ import { normalizeWeightForStorage } from './takes-fence.ts';
@@ -4872,7 +4871,7 @@ index eafaf8bf..2534e5fb 100644
  import { SCHEMA_SQL } from './schema-embedded.ts';
  import { verifySchema } from './schema-verify.ts';
  import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
-@@ -5414,6 +5415,18 @@ export class PostgresEngine implements BrainEngine {
+@@ -5575,6 +5576,18 @@ export class PostgresEngine implements BrainEngine {
      });
    }
  
@@ -4892,7 +4891,7 @@ index eafaf8bf..2534e5fb 100644
      return this.connRetry(async () => {
        await this.sql`
 diff --git a/src/core/schema-embedded.ts b/src/core/schema-embedded.ts
-index d576fd1b..3f30e43b 100644
+index dd0362bd..0cf1c192 100644
 --- a/src/core/schema-embedded.ts
 +++ b/src/core/schema-embedded.ts
 @@ -610,6 +610,19 @@ INSERT INTO config (key, value) VALUES
@@ -4929,7 +4928,7 @@ index 07045df7..bcb9218b 100644
    'gbrain_cycle_locks',
    'subagent_rate_leases',
 diff --git a/src/schema.sql b/src/schema.sql
-index 69222e9a..f62308be 100644
+index 8c8faa22..8eea1248 100644
 --- a/src/schema.sql
 +++ b/src/schema.sql
 @@ -606,6 +606,19 @@ INSERT INTO config (key, value) VALUES
@@ -4993,7 +4992,7 @@ index 00000000..553b637d
 +  });
 +});
 diff --git a/test/e2e/ingestion-roundtrip.test.ts b/test/e2e/ingestion-roundtrip.test.ts
-index 732b1cf1..7d8f1d01 100644
+index a0fae218..bf9a394a 100644
 --- a/test/e2e/ingestion-roundtrip.test.ts
 +++ b/test/e2e/ingestion-roundtrip.test.ts
 @@ -4,14 +4,14 @@
@@ -5025,7 +5024,7 @@ index 732b1cf1..7d8f1d01 100644
  
  // Fake job-context constructor so we can drive the handler directly
  // from the dispatcher without spinning up a Minion worker.
-@@ -58,6 +59,22 @@ function makeFakeJobCtx(data: Record<string, unknown>): MinionJobContext {
+@@ -59,6 +60,22 @@ function makeFakeJobCtx(data: Record<string, unknown>): MinionJobContext {
    };
  }
  
@@ -5048,7 +5047,7 @@ index 732b1cf1..7d8f1d01 100644
  let engine: PGLiteEngine;
  let tmpRoot: string;
  let inboxDir: string;
-@@ -75,6 +92,9 @@ afterAll(async () => {
+@@ -76,6 +93,9 @@ afterAll(async () => {
  
  beforeEach(async () => {
    await resetPgliteState(engine);
@@ -5058,7 +5057,7 @@ index 732b1cf1..7d8f1d01 100644
    // 200ms grace period for the previous test's chokidar watchers to fully
    // release OS-level FSEvents handles on macOS. Without this, the second
    // test's watcher events queue behind the first test's pending cleanup
-@@ -127,8 +147,7 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
+@@ -128,8 +148,7 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
          // Route the event into the handler directly. In production the
          // daemon would submit a Minion job and the worker would invoke
          // the handler; here we collapse that for test-loop efficiency.
@@ -5068,7 +5067,7 @@ index 732b1cf1..7d8f1d01 100644
        },
      });
  
-@@ -178,7 +197,7 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
+@@ -179,7 +198,7 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
      await daemon.stop();
    }, 15_000);
  
@@ -5077,7 +5076,7 @@ index 732b1cf1..7d8f1d01 100644
      const { logger } = captureLogger();
      const handler = makeIngestCaptureHandler(engine);
      const dispatchedEvents: IngestionEvent[] = [];
-@@ -188,8 +207,7 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
+@@ -189,8 +208,7 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
        logger,
        dispatch: async (event) => {
          dispatchedEvents.push(event);
@@ -5087,7 +5086,7 @@ index 732b1cf1..7d8f1d01 100644
        },
      });
  
-@@ -212,13 +230,12 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
+@@ -213,13 +231,12 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
      await daemon.start();
      await waitFor(() => dispatchedEvents.length === 1, 15000);
  
@@ -5104,7 +5103,7 @@ index 732b1cf1..7d8f1d01 100644
      let dedupHits = 0;
      for (let i = 0; i < 240; i++) {
        dedupHits = (await daemon.healthCheck()).dedup.hits;
-@@ -226,9 +243,8 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
+@@ -227,9 +244,8 @@ describe('ingestion roundtrip — inbox-folder → daemon → ingest_capture →
        await new Promise((r) => setTimeout(r, 25));
      }
  
@@ -5116,7 +5115,7 @@ index 732b1cf1..7d8f1d01 100644
      expect(dedupHits).toBeGreaterThanOrEqual(1);
  
      await daemon.stop();
-@@ -246,8 +262,7 @@ describe('ingestion roundtrip — multi-source coordination', () => {
+@@ -247,8 +263,7 @@ describe('ingestion roundtrip — multi-source coordination', () => {
        logger,
        dispatch: async (event) => {
          dispatchedEvents.push(event);
@@ -6564,10 +6563,10 @@ index 123972b4..0942fa27 100644
      abortSignal: new AbortController().signal,
 diff --git a/test/ingestion/http-owner-vertical-slice.serial.test.ts b/test/ingestion/http-owner-vertical-slice.serial.test.ts
 new file mode 100644
-index 00000000..adf816bc
+index 00000000..f7e59d30
 --- /dev/null
 +++ b/test/ingestion/http-owner-vertical-slice.serial.test.ts
-@@ -0,0 +1,268 @@
+@@ -0,0 +1,290 @@
 +import { afterEach, describe, expect, test } from 'bun:test';
 +import { EventEmitter } from 'node:events';
 +import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -6588,6 +6587,26 @@ index 00000000..adf816bc
 +
 +const cleanup: string[] = [];
 +const logger: Logger = { info() {}, warn() {}, error() {} };
++
++async function commitArchive(cwd: string, message: string): Promise<void> {
++  for (const args of [['init'], ['add', '-A'], ['commit', '-m', message]]) {
++    const proc = Bun.spawn(['git', ...args], {
++      cwd,
++      stdout: 'ignore',
++      stderr: 'pipe',
++      env: {
++        ...process.env,
++        GIT_AUTHOR_NAME: 'gbrain-test',
++        GIT_AUTHOR_EMAIL: 'gbrain-test@users.noreply.github.com',
++        GIT_COMMITTER_NAME: 'gbrain-test',
++        GIT_COMMITTER_EMAIL: 'gbrain-test@users.noreply.github.com',
++      },
++    });
++    if (await proc.exited !== 0) {
++      throw new Error(`git ${args[0]} failed: ${await new Response(proc.stderr).text()}`);
++    }
++  }
++}
 +
 +interface Counts { pages: number; versions: number; chunks: number; embeddings: number }
 +
@@ -6748,6 +6767,7 @@ index 00000000..adf816bc
 +    await mkdir(archive, { recursive: true });
 +    await writeFile(join(base, 'config.json'), JSON.stringify({ engine: 'pglite' }));
 +    await writeFile(join(archive, 'proof.md'), '# Vertical Proof\n\nneedle-ulysses-7419\n');
++    await commitArchive(archive, 'initial archive fixture');
 +    const cfg = config(archive, state);
 +
 +    await withEnv({
@@ -6794,6 +6814,7 @@ index 00000000..adf816bc
 +        join(archive, 'proof.md'),
 +        '# Vertical Proof\n\nneedle-ulysses-7419\n\nchanged-version-proof\n',
 +      );
++      await commitArchive(archive, 'update archive fixture');
 +      const engineTwo = new PGLiteEngine();
 +      await engineTwo.connect({ database_path: database });
 +      await engineTwo.initSchema();
@@ -6837,7 +6858,7 @@ index 00000000..adf816bc
 +  }, 45_000);
 +});
 diff --git a/test/ingestion/ingest-capture.test.ts b/test/ingestion/ingest-capture.test.ts
-index 3262ada3..b741a322 100644
+index 7f4bdaf9..ff0bff24 100644
 --- a/test/ingestion/ingest-capture.test.ts
 +++ b/test/ingestion/ingest-capture.test.ts
 @@ -16,6 +16,7 @@ import {
@@ -6856,7 +6877,7 @@ index 3262ada3..b741a322 100644
  });
  
  function makeEvent(overrides: Partial<IngestionEvent> = {}): IngestionEvent {
-@@ -70,19 +72,18 @@ function makeJob(data: Record<string, unknown>): MinionJobContext {
+@@ -71,19 +73,18 @@ function makeJob(data: Record<string, unknown>): MinionJobContext {
  describe('defaultSlugForEvent', () => {
    test('builds inbox/YYYY-MM-DD-<hash6> slug', () => {
      const ev = makeEvent({ content_hash: 'abcdef1234567890'.padEnd(64, '0') });
@@ -6881,7 +6902,7 @@ index 3262ada3..b741a322 100644
      expect(slug).toMatch(/^inbox\/2026-01-05-/);
    });
  });
-@@ -109,6 +110,13 @@ describe('ingest_capture handler — slug resolution', () => {
+@@ -110,6 +111,13 @@ describe('ingest_capture handler — slug resolution', () => {
      const result = await handler(makeJob({ event: ev }));
      expect(result.slug).toMatch(/^inbox\/\d{4}-\d{2}-\d{2}-[a-f0-9]{6}$/);
    });
@@ -6895,7 +6916,7 @@ index 3262ada3..b741a322 100644
  });
  
  describe('ingest_capture handler — validation + routing', () => {
-@@ -138,10 +146,53 @@ describe('ingest_capture handler — validation + routing', () => {
+@@ -139,10 +147,53 @@ describe('ingest_capture handler — validation + routing', () => {
    test('untrusted_payload flag round-trips to the result', async () => {
      const handler = makeIngestCaptureHandler(engine);
      const ev = makeEvent({ content: 'untrusted', untrusted_payload: true });
@@ -6950,7 +6971,7 @@ index 3262ada3..b741a322 100644
    test('trusted (default) payload round-trips as false', async () => {
      const handler = makeIngestCaptureHandler(engine);
      const ev = makeEvent({ content: 'trusted' });
-@@ -227,6 +278,16 @@ describe('ingest_capture handler — provenance write-through (#1522)', () => {
+@@ -228,6 +279,16 @@ describe('ingest_capture handler — provenance write-through (#1522)', () => {
  });
  
  describe('ingest_capture handler — integration with importFromContent', () => {
@@ -6967,7 +6988,7 @@ index 3262ada3..b741a322 100644
    test('imported event lands as a page in the DB', async () => {
      const handler = makeIngestCaptureHandler(engine);
      const ev = makeEvent({
-@@ -235,9 +296,16 @@ describe('ingest_capture handler — integration with importFromContent', () =>
+@@ -236,9 +297,16 @@ describe('ingest_capture handler — integration with importFromContent', () =>
      const result = await handler(makeJob({ event: ev, slug: 'wiki/e2e-test' }));
      expect(result.status).toBe('imported');
  
@@ -6985,7 +7006,7 @@ index 3262ada3..b741a322 100644
    });
  
    test('repeat ingest of same content returns skipped status (content_hash dedup at importFromContent level)', async () => {
-@@ -248,6 +316,29 @@ describe('ingest_capture handler — integration with importFromContent', () =>
+@@ -249,6 +317,29 @@ describe('ingest_capture handler — integration with importFromContent', () =>
  
      const result2 = await handler(makeJob({ event: ev, slug: 'wiki/stable' }));
      expect(result2.status).toBe('skipped');
@@ -8741,11 +8762,11 @@ index 00000000..f0d81e86
 +    });
 +  });
 +});
-diff --git a/test/migration-v124-brain-identity.test.ts b/test/migration-v124-brain-identity.test.ts
+diff --git a/test/migration-v125-brain-identity.test.ts b/test/migration-v125-brain-identity.test.ts
 new file mode 100644
-index 00000000..2407cf2a
+index 00000000..e0148a3c
 --- /dev/null
-+++ b/test/migration-v124-brain-identity.test.ts
++++ b/test/migration-v125-brain-identity.test.ts
 @@ -0,0 +1,36 @@
 +import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 +import { PGLiteEngine } from '../src/core/pglite-engine.ts';
@@ -8763,14 +8784,14 @@ index 00000000..2407cf2a
 +  await engine.disconnect();
 +});
 +
-+describe('migration v124 brain identity singleton', () => {
-+  test('creates one immutable store identity when upgrading from v123', async () => {
-+    expect(LATEST_VERSION).toBe(124);
++describe('migration v125 brain identity singleton', () => {
++  test('creates one immutable store identity when upgrading from v124', async () => {
++    expect(LATEST_VERSION).toBe(125);
 +    await engine.executeRaw('DROP TABLE brain_identity');
-+    await engine.setConfig('version', '123');
++    await engine.setConfig('version', '124');
 +
 +    const applied = await runMigrations(engine);
-+    expect(applied).toEqual({ applied: 1, current: 124 });
++    expect(applied).toEqual({ applied: 1, current: 125 });
 +    const firstId = await engine.getBrainId();
 +    expect(firstId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 +
@@ -8779,16 +8800,16 @@ index 00000000..2407cf2a
 +    );
 +    expect(rows).toEqual([{ singleton: true, brain_id: firstId }]);
 +
-+    expect(await runMigrations(engine)).toEqual({ applied: 0, current: 124 });
++    expect(await runMigrations(engine)).toEqual({ applied: 0, current: 125 });
 +    expect(await engine.getBrainId()).toBe(firstId);
 +  });
 +});
 diff --git a/test/minions.test.ts b/test/minions.test.ts
-index 012e91bd..a39de057 100644
+index 3f6bf3c0..7b41f532 100644
 --- a/test/minions.test.ts
 +++ b/test/minions.test.ts
-@@ -1874,6 +1874,31 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
-     expect(b.queue).toBe('shell');
+@@ -1981,6 +1981,31 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
+     expect(b2.id).toBe(b.id); // and its own cap
    });
  
 +  test('reject mode preserves identity at saturation instead of coalescing', async () => {
