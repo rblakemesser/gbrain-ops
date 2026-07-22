@@ -14,10 +14,10 @@ Subject: [PATCH] feat(ingestion): acknowledge persisted HTTP writes in owner
  7 files changed, 139 insertions(+), 5 deletions(-)
 
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index 0aa2f0ba..f424fc6f 100644
+index 4c7278b7..edc844d2 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
-@@ -438,8 +438,8 @@ export interface ServeHttpOptions {
+@@ -440,8 +440,8 @@ export interface ServeHttpOptions {
     * captured to a non-interactive log and accept the leak.
     */
    printAdminToken?: boolean;
@@ -28,7 +28,7 @@ index 0aa2f0ba..f424fc6f 100644
  }
  
  /**
-@@ -2111,6 +2111,56 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2210,6 +2210,56 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          return;
        }
  
