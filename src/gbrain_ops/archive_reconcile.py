@@ -8,7 +8,13 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Iterable
 
-from .owner_client import OwnerClient, OwnerClientError, OwnerCredentials, content_hash
+from .owner_client import (
+    OwnerClient,
+    OwnerClientError,
+    OwnerCredentials,
+    PersistenceReceipt,
+    content_hash,
+)
 
 
 @dataclass(frozen=True)
@@ -97,8 +103,34 @@ def read_receipt(path: Path) -> dict[str, Any] | None:
 
 
 class ArchiveReconciler:
-    def __init__(self, client: OwnerClient) -> None:
+    def __init__(
+        self,
+        client: OwnerClient,
+        *,
+        max_attempts: int = 3,
+        retry_delay_seconds: float = 1.0,
+    ) -> None:
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be positive")
+        if retry_delay_seconds < 0:
+            raise ValueError("retry_delay_seconds must not be negative")
         self.client = client
+        self.max_attempts = max_attempts
+        self.retry_delay_seconds = retry_delay_seconds
+
+    async def _reconcile_file(self, item: ArchiveCandidate) -> PersistenceReceipt:
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                return await self.client.reconcile_file(
+                    path=item.path,
+                    slug=item.slug,
+                    receipt_path=item.receipt_path,
+                )
+            except OwnerClientError:
+                if attempt >= self.max_attempts:
+                    raise
+                await asyncio.sleep(self.retry_delay_seconds * (2 ** (attempt - 1)))
+        raise AssertionError("retry loop did not return or raise")
 
     async def reconcile(
         self,
@@ -136,11 +168,7 @@ class ArchiveReconciler:
                 )
                 continue
             try:
-                receipt = await self.client.reconcile_file(
-                    path=item.path,
-                    slug=item.slug,
-                    receipt_path=item.receipt_path,
-                )
+                receipt = await self._reconcile_file(item)
             except Exception:
                 failed += 1
                 raise

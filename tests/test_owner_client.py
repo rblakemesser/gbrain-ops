@@ -169,6 +169,19 @@ class FakeOwnerClient(OwnerClient):
         }
 
 
+class FlakyOwnerClient(FakeOwnerClient):
+    def __init__(self, failures: int) -> None:
+        super().__init__()
+        self.failures = failures
+        self.reconcile_calls = 0
+
+    async def reconcile_file(self, *, path: Path, slug: str, receipt_path: Path) -> PersistenceReceipt:
+        self.reconcile_calls += 1
+        if self.reconcile_calls <= self.failures:
+            raise OwnerClientError("transient owner boundary failure")
+        return await super().reconcile_file(path=path, slug=slug, receipt_path=receipt_path)
+
+
 def test_reconcile_writes_private_atomic_receipt_and_skips_verified_replay(tmp_path: Path) -> None:
     root = tmp_path / "archive"
     page = root / "messages" / "2026" / "2026-07-11.md"
@@ -191,6 +204,23 @@ def test_reconcile_writes_private_atomic_receipt_and_skips_verified_replay(tmp_p
     second = asyncio.run(reconciler.reconcile(items))
     assert second.unchanged == 1
     assert client.ingest_calls == 1
+
+
+def test_reconcile_retries_typed_owner_failures_idempotently(tmp_path: Path) -> None:
+    root = tmp_path / "archive"
+    page = root / "messages" / "2026" / "2026-07-11.md"
+    page.parent.mkdir(parents=True)
+    page.write_text("# recent\n", encoding="utf-8")
+    items = candidates(root=root, receipt_root=tmp_path / "receipts")
+    client = FlakyOwnerClient(failures=2)
+    reconciler = ArchiveReconciler(client, max_attempts=3, retry_delay_seconds=0)
+
+    summary = asyncio.run(reconciler.reconcile(items))
+
+    assert summary.submitted == 1
+    assert summary.failed == 0
+    assert client.reconcile_calls == 3
+    assert items[0].receipt_path.is_file()
 
 
 def test_hash_mismatch_does_not_replace_prior_receipt(tmp_path: Path) -> None:
