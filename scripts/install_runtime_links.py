@@ -25,6 +25,11 @@ MAPPING = {
         "messages_collector.py": "adapters/messages/messages_collector.py",
         "run_fresh_sync.sh": "adapters/messages/run_fresh_sync.sh",
     },
+    "whatsapp-to-brain": {
+        "whatsapp_collector.py": "adapters/whatsapp/whatsapp_collector.py",
+        "run_fresh_sync.sh": "adapters/whatsapp/run_fresh_sync.sh",
+        "README.md": "adapters/whatsapp/README.md",
+    },
     "granola-to-brain": {
         "granola_collector.py": "adapters/granola/granola_collector.py",
         "run_fresh_sync.sh": "adapters/granola/run_fresh_sync.sh",

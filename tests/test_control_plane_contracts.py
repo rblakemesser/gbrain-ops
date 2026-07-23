@@ -22,6 +22,7 @@ def example_env(tmp_path: Path) -> dict[str, str]:
         "GBRAIN_GMAIL_ARCHIVE": str(tmp_path / "gmail"),
         "GBRAIN_CALENDAR_ARCHIVE": str(tmp_path / "calendar"),
         "GBRAIN_MESSAGES_ARCHIVE": str(tmp_path / "messages"),
+        "GBRAIN_WHATSAPP_ARCHIVE": str(tmp_path / "whatsapp"),
         "GBRAIN_GRANOLA_ARCHIVE": str(tmp_path / "granola"),
         "GBRAIN_TELEGRAM_ARCHIVE": str(tmp_path / "telegram"),
     }
@@ -30,7 +31,14 @@ def example_env(tmp_path: Path) -> dict[str, str]:
 def test_example_config_expands_and_validates(tmp_path: Path) -> None:
     path = Path(__file__).resolve().parents[1] / "config" / "example.toml"
     value = load_config(path, example_env(tmp_path))
-    assert [source["id"] for source in value["sources"]] == ["mail", "calendar", "messages", "meetings", "telegram"]
+    assert [source["id"] for source in value["sources"]] == [
+        "mail",
+        "calendar",
+        "messages",
+        "whatsapp",
+        "meetings",
+        "telegram",
+    ]
     assert value["sources"][0]["command_argv"][0] == "/usr/bin/python3"
 
 

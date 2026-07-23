@@ -12,7 +12,14 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_STATE_DIR = Path(os.environ.get("GBRAIN_OPS_MONITOR_STATE_DIR", Path.home() / ".local/share/gbrain-ops/monitor/state")).expanduser()
-DEFAULT_JOBS = [value for value in os.environ.get("GBRAIN_OPS_MONITOR_JOBS", "gmail,calendar,messages,granola,telegram").split(",") if value]
+DEFAULT_JOBS = [
+    value
+    for value in os.environ.get(
+        "GBRAIN_OPS_MONITOR_JOBS",
+        "gmail,calendar,messages,whatsapp,granola,telegram",
+    ).split(",")
+    if value
+]
 CONSECUTIVE_FAILURE_THRESHOLD = 3
 STALE_SUCCESS_HOURS = 24
 RE_ALERT_HOURS = 24

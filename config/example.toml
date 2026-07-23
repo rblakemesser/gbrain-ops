@@ -34,6 +34,13 @@ command_argv = ["${PYTHON}", "${GBRAIN_OPS_REPO}/adapters/messages/messages_coll
 archive_roots = ["${GBRAIN_MESSAGES_ARCHIVE}"]
 
 [[sources]]
+id = "whatsapp"
+kind = "whatsapp-macos-coredata"
+interval_seconds = 21600
+command_argv = ["${PYTHON}", "${GBRAIN_OPS_REPO}/adapters/whatsapp/whatsapp_collector.py", "recent", "--days", "7"]
+archive_roots = ["${GBRAIN_WHATSAPP_ARCHIVE}"]
+
+[[sources]]
 id = "meetings"
 kind = "granola"
 interval_seconds = 900
