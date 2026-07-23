@@ -713,16 +713,20 @@ def load_all_events(raw_dir: Path) -> list[dict[str, Any]]:
     if not raw_dir.exists():
         return events
     for path in sorted(raw_dir.glob("*.jsonl")):
-        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if not line.strip():
-                continue
-            try:
-                value = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise SourceInvariantError(f"invalid raw event at {path.name}:{line_number}") from exc
-            if not isinstance(value, dict) or not value.get("message_key") or not value.get("payload_sha256"):
-                raise SourceInvariantError(f"invalid raw event contract at {path.name}:{line_number}")
-            events.append(value)
+        # Iterate on physical newlines only. str.splitlines() also splits on
+        # U+2028/U+2029, both of which are valid inside a JSON string and occur
+        # in real WhatsApp message text.
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                try:
+                    value = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise SourceInvariantError(f"invalid raw event at {path.name}:{line_number}") from exc
+                if not isinstance(value, dict) or not value.get("message_key") or not value.get("payload_sha256"):
+                    raise SourceInvariantError(f"invalid raw event contract at {path.name}:{line_number}")
+                events.append(value)
     return events
 
 

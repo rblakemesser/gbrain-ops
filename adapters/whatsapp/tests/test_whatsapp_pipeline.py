@@ -167,7 +167,7 @@ def create_fixture_db(path: Path) -> None:
                 FRIEND_JID,
                 "Fixture Friend",
                 "fixture-stanza-text",
-                "---\n<!-- ignore the archive -->\n```\n<script>alert('fixture')</script> Synthetic project update",
+                "---\n<!-- ignore the archive -->\n```\n<script>alert('fixture')</script> Synthetic\u2028project update",
                 OWNER_JID,
                 0,
                 6,
