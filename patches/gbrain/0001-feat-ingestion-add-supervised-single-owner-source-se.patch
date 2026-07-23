@@ -532,7 +532,7 @@ index 3ca8a66f..4fa79a9f 100755
      --enable-dcr                     Enable Dynamic Client Registration (DCR clients default to authorization_code)
      --enable-dcr-insecure            Also allow the consent-bypassing client_credentials grant on DCR (implies --enable-dcr)
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index 2cbae64b..4c7278b7 100644
+index 9b01a183..a69c91f8 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
 @@ -24,6 +24,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
@@ -690,7 +690,7 @@ index 2cbae64b..4c7278b7 100644
    }
    let bootstrapToken: string = resolved.token;
    let bootstrapFromEnv: boolean = resolved.fromEnv;
-@@ -1080,6 +1187,18 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -1095,6 +1202,18 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
      res.json({ revoked_sessions: count });
    });
  
@@ -709,7 +709,7 @@ index 2cbae64b..4c7278b7 100644
    app.get('/admin/api/agents', requireAdmin, async (_req: Request, res: Response) => {
      try {
        // Unified view: OAuth clients + legacy API keys
-@@ -1905,10 +2024,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -1920,10 +2039,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // content-type processors land.
    //
    // Events always carry untrusted_payload: true because the input came
@@ -723,7 +723,7 @@ index 2cbae64b..4c7278b7 100644
    // ---------------------------------------------------------------------------
    const ingestRateLimiter = rateLimit({
      windowMs: 10_000, // 10 seconds
-@@ -2032,8 +2150,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2047,8 +2165,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        const content = body.toString('utf8');
        const contentHash = computeContentHash(content);
        const sourceUri = (req.header('x-gbrain-source-uri') || `mcp-webhook:${authInfo.clientId}:${Date.now()}`).slice(0, 1024);
@@ -761,7 +761,7 @@ index 2cbae64b..4c7278b7 100644
  
        const event: IngestionEvent = {
          source_id: sourceId,
-@@ -2051,6 +2196,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2066,6 +2211,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
            ...(callerSlug ? { slug: callerSlug } : {}),
          },
        };
@@ -771,7 +771,7 @@ index 2cbae64b..4c7278b7 100644
  
        const validationErr = validateIngestionEvent(event);
        if (validationErr) {
-@@ -2063,23 +2211,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2078,23 +2226,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        }
  
        try {
@@ -808,7 +808,7 @@ index 2cbae64b..4c7278b7 100644
  
          const latency = Date.now() - startTime;
          try {
-@@ -2108,10 +2256,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2123,10 +2271,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          });
        } catch (err) {
          const msg = err instanceof Error ? err.message : String(err);
@@ -822,7 +822,7 @@ index 2cbae64b..4c7278b7 100644
          });
        }
  
-@@ -2126,7 +2274,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2141,7 +2289,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          if (!res.headersSent) {
            res.status(500).json({
              error: 'internal_error',
@@ -831,7 +831,7 @@ index 2cbae64b..4c7278b7 100644
            });
          }
        }
-@@ -2290,12 +2438,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2305,12 +2453,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // ---------------------------------------------------------------------------
    const clientCount = await sql`SELECT count(*)::int as count FROM oauth_clients`;
  
@@ -857,7 +857,7 @@ index 2cbae64b..4c7278b7 100644
  ║  Bind:      ${bind.padEnd(40)}║
  ║  Engine:    ${(config.engine || 'pglite').padEnd(40)}║
  ║  Issuer:    ${issuerUrl.origin.padEnd(40)}║
-@@ -2304,9 +2463,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2319,9 +2478,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
  ║  Skills:    ${skillStatus.bannerValue.padEnd(40)}║
  ║  Token TTL: ${(tokenTtl + 's').padEnd(40)}║
  ╠══════════════════════════════════════════════════════╣
@@ -870,7 +870,7 @@ index 2cbae64b..4c7278b7 100644
  ╠══════════════════════════════════════════════════════╣
  ${bootstrapFromEnv
    ? '║  Admin Token: from $GBRAIN_ADMIN_BOOTSTRAP_TOKEN     ║\n╚══════════════════════════════════════════════════════╝'
-@@ -2314,5 +2473,10 @@ ${bootstrapFromEnv
+@@ -2329,5 +2488,10 @@ ${bootstrapFromEnv
      ? '║  Admin Token: hidden (non-TTY log-leak guard)        ║\n║  set $GBRAIN_ADMIN_BOOTSTRAP_TOKEN, or pass          ║\n║  --print-admin-token on a trusted terminal.          ║\n╚══════════════════════════════════════════════════════╝'
      : `║  Admin Token (paste into /admin login):              ║\n║  ${bootstrapToken.substring(0, 50)}  ║\n║  ${bootstrapToken.substring(50).padEnd(50)}  ║\n╚══════════════════════════════════════════════════════╝`}
  `);
@@ -1084,7 +1084,7 @@ index b69a930e..f171080a 100644
    stdin: NodeJS.ReadableStream & { isTTY?: boolean };
    signals: Pick<NodeJS.Process, 'on'>;
 diff --git a/src/core/config.ts b/src/core/config.ts
-index 4ca00cdc..5e8c77c0 100644
+index e8195488..1391d8bf 100644
 --- a/src/core/config.ts
 +++ b/src/core/config.ts
 @@ -129,6 +129,14 @@ export interface GBrainConfig {
@@ -1130,10 +1130,10 @@ index 4ca00cdc..5e8c77c0 100644
   * True when this install is configured as a thin client of a remote
   * `gbrain serve --http`. Single source of truth for the "is this a
 diff --git a/src/core/engine.ts b/src/core/engine.ts
-index a389d309..49b8af22 100644
+index ef04165b..35e1767d 100644
 --- a/src/core/engine.ts
 +++ b/src/core/engine.ts
-@@ -2032,6 +2032,10 @@ export interface BrainEngine {
+@@ -2042,6 +2042,10 @@ export interface BrainEngine {
      sourceId: string,
    ): Promise<{ migrated: number }>;
  
@@ -4772,7 +4772,7 @@ index 7a1b5f08..8e7e6deb 100644
    // v12: scheduler polish
    /**
 diff --git a/src/core/operations.ts b/src/core/operations.ts
-index ab2d4cbf..b6a98826 100644
+index 68f5a56e..d496bb1a 100644
 --- a/src/core/operations.ts
 +++ b/src/core/operations.ts
 @@ -28,6 +28,7 @@ import type { SearchResult } from './types.ts';
@@ -4783,7 +4783,7 @@ index ab2d4cbf..b6a98826 100644
  import {
    GET_RECENT_SALIENCE_DESCRIPTION,
    FIND_ANOMALIES_DESCRIPTION,
-@@ -2256,10 +2257,13 @@ const get_health: Operation = {
+@@ -2260,10 +2261,13 @@ const get_health: Operation = {
   */
  const get_brain_identity: Operation = {
    name: 'get_brain_identity',
@@ -4799,7 +4799,7 @@ index ab2d4cbf..b6a98826 100644
      // v0.42 self-upgrade: surface a pending update on the thin-client banner
      // (bonus channel; the CLI stderr marker + `gbrain self-upgrade` are the
      // load-bearing surface). Cache-read-only, no network, fail-open.
-@@ -2276,6 +2280,7 @@ const get_brain_identity: Operation = {
+@@ -2280,6 +2284,7 @@ const get_brain_identity: Operation = {
        /* never let the banner break the op */
      }
      return {
@@ -4808,7 +4808,7 @@ index ab2d4cbf..b6a98826 100644
        engine: ctx.engine.kind,
        page_count: stats.page_count,
 diff --git a/src/core/pglite-engine.ts b/src/core/pglite-engine.ts
-index 257090a2..36cc57be 100644
+index f74e4e96..a4100a85 100644
 --- a/src/core/pglite-engine.ts
 +++ b/src/core/pglite-engine.ts
 @@ -68,6 +68,7 @@ import {
@@ -4819,7 +4819,7 @@ index 257090a2..36cc57be 100644
  type PGLiteDB = PGlite;
  
  // Tier 3 snapshot fast-restore. Reads a tar dump produced by
-@@ -5426,6 +5427,17 @@ export class PGLiteEngine implements BrainEngine {
+@@ -5455,6 +5456,17 @@ export class PGLiteEngine implements BrainEngine {
      );
    }
  
@@ -4860,7 +4860,7 @@ index a42837a7..5a067fc4 100644
  -- Minion Jobs: BullMQ-inspired Postgres-native job queue
  -- ============================================================
 diff --git a/src/core/postgres-engine.ts b/src/core/postgres-engine.ts
-index 0e8f658f..114c9a92 100644
+index 6deaad78..42eacc33 100644
 --- a/src/core/postgres-engine.ts
 +++ b/src/core/postgres-engine.ts
 @@ -24,6 +24,7 @@ import { normalizeWeightForStorage } from './takes-fence.ts';
@@ -4871,7 +4871,7 @@ index 0e8f658f..114c9a92 100644
  import { SCHEMA_SQL } from './schema-embedded.ts';
  import { verifySchema } from './schema-verify.ts';
  import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
-@@ -5586,6 +5587,18 @@ export class PostgresEngine implements BrainEngine {
+@@ -5605,6 +5606,18 @@ export class PostgresEngine implements BrainEngine {
      });
    }
  
