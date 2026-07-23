@@ -2,7 +2,7 @@
   "schema": "gbrain-ops-vendor-patches/v1",
   "upstream": "https://github.com/garrytan/gbrain.git",
   "branch": "master",
-  "base_commit": "a356f64e4f36c6f3dd9251c7127e557fc161c7cd",
+  "base_commit": "0bd752b3f72eae72728f9091e12b3b7bfa4f5cbd",
   "patches": [
     "0001-feat-ingestion-add-supervised-single-owner-source-se.patch",
     "0002-fix-pglite-surface-lock-filesystem-errors-immediately.patch",

@@ -1084,7 +1084,7 @@ index b69a930e..f171080a 100644
    stdin: NodeJS.ReadableStream & { isTTY?: boolean };
    signals: Pick<NodeJS.Process, 'on'>;
 diff --git a/src/core/config.ts b/src/core/config.ts
-index e8195488..1391d8bf 100644
+index 644df2c2..1eb65bec 100644
 --- a/src/core/config.ts
 +++ b/src/core/config.ts
 @@ -129,6 +129,14 @@ export interface GBrainConfig {
@@ -4718,7 +4718,7 @@ index 7bd60aaf..9d50ae19 100644
 -  };
  }
 diff --git a/src/core/minions/queue.ts b/src/core/minions/queue.ts
-index ccf71cd9..ed15182f 100644
+index 0d0780fd..8e497f3d 100644
 --- a/src/core/minions/queue.ts
 +++ b/src/core/minions/queue.ts
 @@ -35,6 +35,21 @@ export interface TrustedSubmitOpts {
@@ -4743,7 +4743,7 @@ index ccf71cd9..ed15182f 100644
  const MIGRATION_VERSION = 7;
  
  const DEFAULT_MAX_SPAWN_DEPTH = 5;
-@@ -186,6 +201,14 @@ export class MinionQueue {
+@@ -201,6 +216,14 @@ export class MinionQueue {
          );
          const waitingCount = parseInt(waitingCountRows[0]?.count ?? '0', 10);
          if (waitingCount >= maxWaiting) {
@@ -8857,10 +8857,10 @@ index 00000000..e0148a3c
 +  });
 +});
 diff --git a/test/minions.test.ts b/test/minions.test.ts
-index 3f6bf3c0..7b41f532 100644
+index 0909d7e4..ffec1883 100644
 --- a/test/minions.test.ts
 +++ b/test/minions.test.ts
-@@ -1981,6 +1981,31 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
+@@ -2048,6 +2048,31 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
      expect(b2.id).toBe(b.id); // and its own cap
    });
  
