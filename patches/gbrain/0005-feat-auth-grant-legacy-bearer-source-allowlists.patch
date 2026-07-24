@@ -9,7 +9,7 @@ Subject: [PATCH] feat(auth): grant legacy bearer source allowlists
  2 files changed, 41 insertions(+), 8 deletions(-)
 
 diff --git a/src/commands/auth.ts b/src/commands/auth.ts
-index b045b8bc..a4409bcc 100644
+index 0e7d2337..53623a32 100644
 --- a/src/commands/auth.ts
 +++ b/src/commands/auth.ts
 @@ -66,7 +66,7 @@ async function withConfiguredSql<T>(
@@ -34,7 +34,7 @@ index b045b8bc..a4409bcc 100644
        // JSONB write: pass the object via executeRawJsonb with an explicit
        // ::jsonb cast in the SQL string. Both engines round-trip the object
        // through the wire-protocol type oid without the v0.12.0 double-encode
-@@ -535,7 +539,7 @@ async function registerClient(name: string, args: string[]) {
+@@ -589,7 +593,7 @@ async function rescopeClient(clientId: string, args: string[]) {
   * resolved to `rest[0]` when `takesIdx === -1`, silently dropping the name on
   * the bare `gbrain auth create <name>` form.
   */
@@ -43,7 +43,7 @@ index b045b8bc..a4409bcc 100644
    const takesIdx = rest.indexOf('--takes-holders');
    const takesHolders = takesIdx >= 0 && rest[takesIdx + 1]
      ? rest[takesIdx + 1].split(',').map(s => s.trim()).filter(Boolean)
-@@ -546,8 +550,15 @@ export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolder
+@@ -600,8 +604,15 @@ export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolder
    const scopes = scopesValue
      ? scopesValue.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
      : undefined;
@@ -61,7 +61,7 @@ index b045b8bc..a4409bcc 100644
  }
  
  export async function runAuth(args: string[]): Promise<void> {
-@@ -556,7 +567,11 @@ export async function runAuth(args: string[]): Promise<void> {
+@@ -610,7 +621,11 @@ export async function runAuth(args: string[]): Promise<void> {
      case 'create': {
        // v0.28: optional --takes-holders world,garry,brain (default: world only)
        const parsed = parseAuthCreateArgs(rest);
@@ -74,7 +74,7 @@ index b045b8bc..a4409bcc 100644
        return;
      }
      case 'list': await list(); return;
-@@ -579,13 +594,14 @@ export async function runAuth(args: string[]): Promise<void> {
+@@ -634,13 +649,14 @@ export async function runAuth(args: string[]): Promise<void> {
        console.log(`GBrain Token Management
  
  Usage:

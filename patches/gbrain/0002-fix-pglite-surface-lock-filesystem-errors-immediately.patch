@@ -10,10 +10,10 @@ Do not retry read-only or permission failures as if another process held the PGL
  2 files changed, 25 insertions(+), 3 deletions(-)
 
 diff --git a/src/core/pglite-lock.ts b/src/core/pglite-lock.ts
-index 9b00bfe7..b8c9cc43 100644
+index 188e5c66..56298b37 100644
 --- a/src/core/pglite-lock.ts
 +++ b/src/core/pglite-lock.ts
-@@ -174,8 +174,15 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
+@@ -232,8 +232,15 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
        const ownerToken = tokenOf({ pid: process.pid, acquired_at: now });
        return { lockDir, acquired: true, lockPath, ownerToken, heartbeat: startHeartbeat(lockPath, ownerToken) };
      } catch (e: unknown) {
@@ -29,10 +29,10 @@ index 9b00bfe7..b8c9cc43 100644
 +      }
 +      // EEXIST means another process won the mkdir race; retry until timeout.
        if (Date.now() - startTime >= timeoutMs) {
-         // Timeout — report which process holds the lock
-         const lockPath = join(lockDir, LOCK_FILE);
+         throw pgliteLockTimeoutError(lockDir);
+       }
 diff --git a/test/pglite-lock.test.ts b/test/pglite-lock.test.ts
-index 5d2f472b..f3a141a9 100644
+index 0f8c545a..e6934b1c 100644
 --- a/test/pglite-lock.test.ts
 +++ b/test/pglite-lock.test.ts
 @@ -1,5 +1,5 @@
