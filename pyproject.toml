@@ -34,3 +34,9 @@ python_files = ["test_*.py"]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+
+[tool.ruff.lint]
+# Ruff 0.16 broadened its defaults. Keep the repository's established gate
+# explicit so a linter release cannot silently turn unrelated advisory rules
+# into merge blockers.
+select = ["E4", "E7", "E9", "F"]
