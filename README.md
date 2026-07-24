@@ -50,13 +50,33 @@ python scripts/run_keyword_oracle.py \
 gbrain-ops privacy-check .
 ```
 
-## Development
+## Development and merge gate
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev,google,telegram]'
-.venv/bin/pytest -q
-.venv/bin/python -m gbrain_ops.privacy_scan .
+PYTHON=.venv/bin/python scripts/local_signoff.sh
 ```
+
+`main` uses two complementary gates:
+
+- `scripts/local_signoff.sh --signoff` requires a clean, pushed branch; runs tests, Ruff, the privacy scanner, and Gitleaks; then records `gh signoff` only after every local check passes.
+- GitHub Actions runs the Python/security and pinned-vendor jobs in parallel. The final `pre-merge` job fails unless both jobs pass.
+
+The protected branch requires a pull request, an up-to-date branch, `signoff`, and `pre-merge`, including for repository admins. The normal flow is:
+
+1. Commit on a topic branch and push it with an upstream.
+2. Run `PYTHON=.venv/bin/python scripts/local_signoff.sh --signoff`.
+3. Open the pull request and wait for the required `pre-merge` check.
+4. Merge only after GitHub reports both required contexts green.
+
+The repository-owned protection command is idempotent and preserves the complete gate:
+
+```bash
+python scripts/configure_merge_gate.py --check
+python scripts/configure_merge_gate.py --apply
+```
+
+Use that command rather than `gh signoff install`; the extension installer owns only signoff contexts and replaces the rest of branch protection.
 
 See `docs/ARCHITECTURE.md` and `config/example.toml`.
