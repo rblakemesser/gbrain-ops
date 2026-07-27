@@ -139,7 +139,7 @@ index 85cfdec8..cbb56aaa 100644
  
      "body-parser/type-is": ["type-is@2.1.0", "", { "dependencies": { "content-type": "^2.0.0", "media-typer": "^1.1.0", "mime-types": "^3.0.0" } }, "sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA=="],
 diff --git a/package.json b/package.json
-index 80d1a5e7..22cc37ed 100644
+index 45380ac1..6d9305cb 100644
 --- a/package.json
 +++ b/package.json
 @@ -2,6 +2,7 @@
@@ -194,7 +194,7 @@ index 80d1a5e7..22cc37ed 100644
 +    "bun": "1.3.13"
    },
    "license": "MIT",
-   "version": "0.42.65.0",
+   "version": "0.42.66.0",
 diff --git a/scripts/check-bun-version-sync.mjs b/scripts/check-bun-version-sync.mjs
 new file mode 100644
 index 00000000..00ea6b04
@@ -848,7 +848,7 @@ index 5e30794f..74092445 100644
 +  return server;
  }
 diff --git a/src/commands/serve.ts b/src/commands/serve.ts
-index b69a930e..f171080a 100644
+index ead21f2d..f03659c2 100644
 --- a/src/commands/serve.ts
 +++ b/src/commands/serve.ts
 @@ -1,5 +1,8 @@
@@ -860,7 +860,7 @@ index b69a930e..f171080a 100644
  import { startMcpServer } from '../mcp/server.ts';
  
  // Maximum time the stdio path will wait for engine.disconnect() (PGLite
-@@ -18,6 +21,13 @@ const CLEANUP_DEADLINE_MS = 5_000;
+@@ -29,6 +32,13 @@ const DEFAULT_BOOT_TIMEOUT_SECONDS = 60;
  // faster polling has no benefit, slower would extend the lock-leak window.
  const PARENT_WATCHDOG_INTERVAL_MS = 5_000;
  
@@ -874,10 +874,10 @@ index b69a930e..f171080a 100644
  export interface ServeOptions {
    // Test seam — defaults to the live process. The lifecycle plumbing reads
    // these for stdin EOF detection, signal handlers, and exit, so unit
-@@ -67,6 +77,11 @@ export interface ServeOptions {
-   // transport.onclose still cover legitimate shutdown.
-   // Defaults to `process.env.MCP_STDIO === '1'` when omitted.
-   mcpStdio?: boolean;
+@@ -82,6 +92,11 @@ export interface ServeOptions {
+   // Defaults to GBRAIN_SERVE_BOOT_TIMEOUT_SECONDS (seconds; 60 when
+   // unset, 0 disables) when omitted.
+   bootTimeoutMs?: number;
 +  // HTTP owner lifecycle seams. Production defaults are loaded lazily.
 +  runServeHttp?: (engine: BrainEngine, options: ServeHttpOptions) => Promise<HttpServerHandle>;
 +  createIngestionService?: (config: GBrainConfig) => IngestionLifecycle;
@@ -886,7 +886,7 @@ index b69a930e..f171080a 100644
  }
  
  export async function runServe(
-@@ -84,7 +99,8 @@ export async function runServe(
+@@ -99,7 +114,8 @@ export async function runServe(
  
    if (isHttp) {
      const portIdx = args.indexOf('--port');
@@ -896,7 +896,7 @@ index b69a930e..f171080a 100644
  
      const ttlIdx = args.indexOf('--token-ttl');
      const tokenTtl = ttlIdx >= 0 ? parseInt(args[ttlIdx + 1]) || 3600 : 3600;
-@@ -121,14 +137,54 @@ export async function runServe(
+@@ -136,14 +152,54 @@ export async function runServe(
      // want the value leaking into log aggregators on every supervisor
      // restart.
      const suppressBootstrapToken = args.includes('--suppress-bootstrap-token');
@@ -953,8 +953,8 @@ index b69a930e..f171080a 100644
      return;
    }
  
-@@ -150,6 +206,95 @@ export async function runServe(
-   // hooks from being able to call process.exit() cleanly.
+@@ -217,6 +273,95 @@ function resolveBootTimeoutMs(): number {
+   return n * 1000;
  }
  
 +export function installHttpOwnerLifecycle(
@@ -1050,7 +1050,7 @@ index b69a930e..f171080a 100644
    stdin: NodeJS.ReadableStream & { isTTY?: boolean };
    signals: Pick<NodeJS.Process, 'on'>;
 diff --git a/src/core/config.ts b/src/core/config.ts
-index 50fa2f72..84ccfff0 100644
+index 190485d5..43f24a90 100644
 --- a/src/core/config.ts
 +++ b/src/core/config.ts
 @@ -166,6 +166,14 @@ export interface GBrainConfig {
@@ -4721,7 +4721,7 @@ index 7a1b5f08..8e7e6deb 100644
    // v12: scheduler polish
    /**
 diff --git a/src/core/operations.ts b/src/core/operations.ts
-index 04763b17..67ec25a6 100644
+index ff6dfc13..e99abcf3 100644
 --- a/src/core/operations.ts
 +++ b/src/core/operations.ts
 @@ -28,6 +28,7 @@ import type { SearchResult } from './types.ts';
@@ -4732,7 +4732,7 @@ index 04763b17..67ec25a6 100644
  import {
    GET_RECENT_SALIENCE_DESCRIPTION,
    FIND_ANOMALIES_DESCRIPTION,
-@@ -2362,10 +2363,13 @@ const get_health: Operation = {
+@@ -2415,10 +2416,13 @@ const get_health: Operation = {
   */
  const get_brain_identity: Operation = {
    name: 'get_brain_identity',
@@ -4748,7 +4748,7 @@ index 04763b17..67ec25a6 100644
      // v0.42 self-upgrade: surface a pending update on the thin-client banner
      // (bonus channel; the CLI stderr marker + `gbrain self-upgrade` are the
      // load-bearing surface). Cache-read-only, no network, fail-open.
-@@ -2382,6 +2386,7 @@ const get_brain_identity: Operation = {
+@@ -2435,6 +2439,7 @@ const get_brain_identity: Operation = {
        /* never let the banner break the op */
      }
      return {
@@ -4757,7 +4757,7 @@ index 04763b17..67ec25a6 100644
        engine: ctx.engine.kind,
        page_count: stats.page_count,
 diff --git a/src/core/pglite-engine.ts b/src/core/pglite-engine.ts
-index bae0181b..5ff36664 100644
+index c842a08b..33de5f44 100644
 --- a/src/core/pglite-engine.ts
 +++ b/src/core/pglite-engine.ts
 @@ -68,6 +68,7 @@ import {
@@ -4768,7 +4768,7 @@ index bae0181b..5ff36664 100644
  type PGLiteDB = PGlite;
  
  // Tier 3 snapshot fast-restore. Reads a tar dump produced by
-@@ -5512,6 +5513,17 @@ export class PGLiteEngine implements BrainEngine {
+@@ -5513,6 +5514,17 @@ export class PGLiteEngine implements BrainEngine {
      );
    }
  
@@ -4809,7 +4809,7 @@ index db1c762d..8b826ae1 100644
  -- Minion Jobs: BullMQ-inspired Postgres-native job queue
  -- ============================================================
 diff --git a/src/core/postgres-engine.ts b/src/core/postgres-engine.ts
-index ad119a5b..f4d36320 100644
+index 173e8bd2..30d90099 100644
 --- a/src/core/postgres-engine.ts
 +++ b/src/core/postgres-engine.ts
 @@ -24,6 +24,7 @@ import { normalizeWeightForStorage } from './takes-fence.ts';
@@ -4820,7 +4820,7 @@ index ad119a5b..f4d36320 100644
  import { SCHEMA_SQL } from './schema-embedded.ts';
  import { verifySchema } from './schema-verify.ts';
  import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
-@@ -5660,6 +5661,18 @@ export class PostgresEngine implements BrainEngine {
+@@ -5661,6 +5662,18 @@ export class PostgresEngine implements BrainEngine {
      });
    }
  

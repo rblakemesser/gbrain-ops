@@ -86,10 +86,10 @@ index 74092445..71d2c726 100644
          const submission = await submitIngestCapture(
            ingestQueue,
 diff --git a/src/commands/serve.ts b/src/commands/serve.ts
-index f171080a..6c096ba0 100644
+index f03659c2..c6facf32 100644
 --- a/src/commands/serve.ts
 +++ b/src/commands/serve.ts
-@@ -26,7 +26,7 @@ export interface HttpServerHandle {
+@@ -37,7 +37,7 @@ export interface HttpServerHandle {
    closeAllConnections?: () => void;
  }
  
