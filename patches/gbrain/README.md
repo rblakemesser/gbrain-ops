@@ -15,6 +15,12 @@ The manifest pins a public upstream revision and applies patches with `git am --
      6. configured single-owner autonomous ingestion, command/archive adapters, HTTP lifecycle, and health reporting.
 2. `0002-fix-pglite-surface-lock-filesystem-errors-immediately.patch`
    - Independent lock correctness fix. Permission, read-only-filesystem, and invalid-path errors fail immediately with the lock path and filesystem code instead of becoming a misleading contention timeout.
+3. `0003-feat-ingestion-acknowledge-persisted-http-writes-in.patch`
+   - Makes owner HTTP ingestion acknowledge durable persistence rather than only queue admission.
+4. `0004-feat-auth-scope-legacy-bearer-tokens.patch`
+   - Adds least-privilege scopes to legacy bearer credentials.
+5. `0005-feat-auth-grant-legacy-bearer-source-allowlists.patch`
+   - Adds source allowlists so scoped credentials can read only explicitly granted archives.
 
 ## Verification
 
@@ -32,4 +38,4 @@ bun test test/pglite-lock.test.ts \
   test/serve-http-owner-lifecycle.test.ts
 ```
 
-The first patch may be mechanically split when preparing upstream pull requests. Do not reorder or partially apply those candidate slices without retesting their shared contracts. Neither patch contains private runtime material.
+The first patch may be mechanically split when preparing upstream pull requests. Do not reorder or partially apply those candidate slices without retesting their shared contracts. No carried patch contains private runtime material.

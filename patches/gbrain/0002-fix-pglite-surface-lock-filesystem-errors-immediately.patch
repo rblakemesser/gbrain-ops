@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 08aa46013063feba098d3a843d70b08b65e6e660 Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:49:33 -0500
 Subject: [PATCH] fix(pglite): surface lock filesystem errors immediately
@@ -10,7 +10,7 @@ Do not retry read-only or permission failures as if another process held the PGL
  2 files changed, 25 insertions(+), 3 deletions(-)
 
 diff --git a/src/core/pglite-lock.ts b/src/core/pglite-lock.ts
-index 188e5c66..56298b37 100644
+index 188e5c66659dc5ada2a74363f619d2cd8bd2cc4c..56298b37775b43e55400e9bf095dd0edae1ca148 100644
 --- a/src/core/pglite-lock.ts
 +++ b/src/core/pglite-lock.ts
 @@ -232,8 +232,15 @@ export async function acquireLock(dataDir: string | undefined, opts?: { timeoutM
@@ -32,7 +32,7 @@ index 188e5c66..56298b37 100644
          throw pgliteLockTimeoutError(lockDir);
        }
 diff --git a/test/pglite-lock.test.ts b/test/pglite-lock.test.ts
-index 0f8c545a..e6934b1c 100644
+index 0f8c545a1d3af020120c5126fc980302b47d9891..e6934b1cd528bb460d0eb5e8c6a5989415f982dc 100644
 --- a/test/pglite-lock.test.ts
 +++ b/test/pglite-lock.test.ts
 @@ -1,5 +1,5 @@

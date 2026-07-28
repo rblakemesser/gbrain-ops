@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 38bc6fe710ea8f4e932febc3302d2e516535ae5f Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:45:16 -0500
 Subject: [PATCH] feat(ingestion): add supervised single-owner source service
@@ -82,7 +82,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  create mode 100644 test/serve-http-startup-failure.serial.test.ts
 
 diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
-index ebc68cd9..664953a4 100644
+index 85fe06761d68c6564646829eda7bfde2f6b1a7f9..4d05c690dd19777524d13a1c882c22625b323c99 100644
 --- a/CONTRIBUTING.md
 +++ b/CONTRIBUTING.md
 @@ -5,11 +5,15 @@
@@ -103,7 +103,7 @@ index ebc68cd9..664953a4 100644
  ## Project structure
  
 diff --git a/bun.lock b/bun.lock
-index 85cfdec8..cbb56aaa 100644
+index 85cfdec8076669bbe60f5f41c175bd4b48a6d374..cbb56aaa76977f196e4a50e155747da63766ea18 100644
 --- a/bun.lock
 +++ b/bun.lock
 @@ -36,12 +36,11 @@
@@ -139,7 +139,7 @@ index 85cfdec8..cbb56aaa 100644
  
      "body-parser/type-is": ["type-is@2.1.0", "", { "dependencies": { "content-type": "^2.0.0", "media-typer": "^1.1.0", "mime-types": "^3.0.0" } }, "sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA=="],
 diff --git a/package.json b/package.json
-index 45380ac1..6d9305cb 100644
+index 13979ea4ffa355f03a88b12ca0ff899b7941683f..156f7312214292f1a172b8bb5130beea304cc106 100644
 --- a/package.json
 +++ b/package.json
 @@ -2,6 +2,7 @@
@@ -150,7 +150,7 @@ index 45380ac1..6d9305cb 100644
    "main": "src/core/index.ts",
    "bin": {
      "gbrain": "src/cli.ts"
-@@ -42,17 +43,19 @@
+@@ -43,17 +44,19 @@
      "test:full": "bun run verify && bash scripts/run-unit-parallel.sh && bun run test:slow && ([ -n \"$DATABASE_URL\" ] && bash scripts/run-e2e.sh || echo '[test:full] skipped E2E (no DATABASE_URL); run docker-compose -f docker-compose.ci.yml up + bun run test:e2e to include' 1>&2)",
      "verify": "bash scripts/run-verify-parallel.sh",
      "check:source-config-leak": "scripts/check-source-config-leak.sh",
@@ -160,8 +160,8 @@ index 45380ac1..6d9305cb 100644
      "check:system-of-record": "scripts/check-system-of-record.sh",
      "check:admin-scope-drift": "scripts/check-admin-scope-drift.sh",
      "check:cli-exec": "scripts/check-cli-executable.sh",
--    "check:all": "scripts/check-privacy.sh && scripts/check-proposal-pii.sh && scripts/check-test-real-names.sh && scripts/check-jsonb-pattern.sh && scripts/check-source-id-projection.sh && scripts/check-source-config-leak.sh && scripts/check-progress-to-stdout.sh && scripts/check-no-legacy-getconnection.sh && scripts/check-test-isolation.sh && scripts/check-trailing-newline.sh && scripts/check-wasm-embedded.sh && scripts/check-exports-count.sh && scripts/check-admin-build.sh && scripts/check-admin-scope-drift.sh && scripts/check-cli-executable.sh && scripts/check-skill-brain-first.sh && scripts/check-operations-filter-bypass.sh && scripts/check-gateway-routed-no-direct-anthropic.sh && scripts/check-worker-pool-atomicity.sh && scripts/check-key-files-current-state.sh && scripts/check-no-double-retry.sh && scripts/check-batch-audit-site.sh",
-+    "check:all": "scripts/check-privacy.sh && scripts/check-proposal-pii.sh && scripts/check-test-real-names.sh && scripts/check-jsonb-pattern.sh && scripts/check-source-id-projection.sh && scripts/check-source-config-leak.sh && bun scripts/check-pglite-open-gates.ts && scripts/check-progress-to-stdout.sh && scripts/check-no-legacy-getconnection.sh && scripts/check-test-isolation.sh && scripts/check-trailing-newline.sh && scripts/check-wasm-embedded.sh && scripts/check-exports-count.sh && scripts/check-admin-build.sh && scripts/check-admin-scope-drift.sh && scripts/check-cli-executable.sh && scripts/check-skill-brain-first.sh && scripts/check-operations-filter-bypass.sh && scripts/check-gateway-routed-no-direct-anthropic.sh && scripts/check-worker-pool-atomicity.sh && scripts/check-key-files-current-state.sh && scripts/check-no-double-retry.sh && scripts/check-batch-audit-site.sh",
+-    "check:all": "scripts/check-privacy.sh && scripts/check-proposal-pii.sh && scripts/check-test-real-names.sh && scripts/check-jsonb-pattern.sh && scripts/check-source-id-projection.sh && scripts/check-source-config-leak.sh && scripts/check-progress-to-stdout.sh && scripts/check-no-tracked-symlinks.sh && scripts/check-no-legacy-getconnection.sh && scripts/check-test-isolation.sh && scripts/check-trailing-newline.sh && scripts/check-wasm-embedded.sh && scripts/check-exports-count.sh && scripts/check-admin-build.sh && scripts/check-admin-scope-drift.sh && scripts/check-cli-executable.sh && scripts/check-skill-brain-first.sh && scripts/check-operations-filter-bypass.sh && scripts/check-gateway-routed-no-direct-anthropic.sh && scripts/check-worker-pool-atomicity.sh && scripts/check-key-files-current-state.sh && scripts/check-no-double-retry.sh && scripts/check-batch-audit-site.sh",
++    "check:all": "scripts/check-privacy.sh && scripts/check-proposal-pii.sh && scripts/check-test-real-names.sh && scripts/check-jsonb-pattern.sh && scripts/check-source-id-projection.sh && scripts/check-source-config-leak.sh && bun scripts/check-pglite-open-gates.ts && scripts/check-progress-to-stdout.sh && scripts/check-no-tracked-symlinks.sh && scripts/check-no-legacy-getconnection.sh && scripts/check-test-isolation.sh && scripts/check-trailing-newline.sh && scripts/check-wasm-embedded.sh && scripts/check-exports-count.sh && scripts/check-admin-build.sh && scripts/check-admin-scope-drift.sh && scripts/check-cli-executable.sh && scripts/check-skill-brain-first.sh && scripts/check-operations-filter-bypass.sh && scripts/check-gateway-routed-no-direct-anthropic.sh && scripts/check-worker-pool-atomicity.sh && scripts/check-key-files-current-state.sh && scripts/check-no-double-retry.sh && scripts/check-batch-audit-site.sh",
      "check:gateway-routed": "scripts/check-gateway-routed-no-direct-anthropic.sh",
      "check:worker-pool-atomicity": "scripts/check-worker-pool-atomicity.sh",
      "check:doc-history": "scripts/check-key-files-current-state.sh",
@@ -171,7 +171,7 @@ index 45380ac1..6d9305cb 100644
      "check:wasm": "scripts/check-wasm-embedded.sh",
      "check:newlines": "scripts/check-trailing-newline.sh",
      "test:e2e": "bash scripts/run-e2e.sh",
-@@ -128,12 +131,12 @@
+@@ -130,12 +133,12 @@
      "zod": "^4.3.6"
    },
    "devDependencies": {
@@ -186,7 +186,7 @@ index 45380ac1..6d9305cb 100644
      "fast-check": "^4.8.0",
      "typescript": "^5.6.0"
    },
-@@ -141,7 +144,7 @@
+@@ -143,7 +146,7 @@
      "@electric-sql/pglite"
    ],
    "engines": {
@@ -194,10 +194,10 @@ index 45380ac1..6d9305cb 100644
 +    "bun": "1.3.13"
    },
    "license": "MIT",
-   "version": "0.42.66.0",
+   "version": "0.42.66.1",
 diff --git a/scripts/check-bun-version-sync.mjs b/scripts/check-bun-version-sync.mjs
 new file mode 100644
-index 00000000..00ea6b04
+index 0000000000000000000000000000000000000000..00ea6b049610382fc962d1771d7ab3bc80fb7a38
 --- /dev/null
 +++ b/scripts/check-bun-version-sync.mjs
 @@ -0,0 +1,43 @@
@@ -246,7 +246,7 @@ index 00000000..00ea6b04
 +process.stdout.write(`${required}\n`);
 diff --git a/scripts/check-pglite-open-gates.ts b/scripts/check-pglite-open-gates.ts
 new file mode 100644
-index 00000000..97800d68
+index 0000000000000000000000000000000000000000..97800d680465a468e7808ec4b0cab12b18083c76
 --- /dev/null
 +++ b/scripts/check-pglite-open-gates.ts
 @@ -0,0 +1,176 @@
@@ -427,10 +427,10 @@ index 00000000..97800d68
 +  console.log('check:pglite-open-gates: ok (all production opens use PGLiteEngine.connect + pglite-lock)');
 +}
 diff --git a/scripts/check-wasm-embedded.sh b/scripts/check-wasm-embedded.sh
-index 4b86458e..4505df0a 100755
+index a9683ec7f4e6285d9720d3ccfcc2169d8b978785..fb6fec1ebf17431f9376a1368a320439807f577e 100755
 --- a/scripts/check-wasm-embedded.sh
 +++ b/scripts/check-wasm-embedded.sh
-@@ -12,20 +12,44 @@
+@@ -12,13 +12,37 @@
  #   - The resulting binary can't parse TypeScript
  #   - Chunks come back without real symbol names (fallback signature)
  #
@@ -466,22 +466,23 @@ index 4b86458e..4505df0a 100755
 +  exit 1
 +fi
 +
- OUT_BIN="$(mktemp /tmp/gbrain-wasm-check.XXXXXX)"
- trap 'rm -f "$OUT_BIN"' EXIT
- 
+ # Build from a container-local copy. On Docker Desktop, Bun canonicalizes a
+ # bind-mounted input to /run/host_virtiofs but keeps /app as the output path;
+ # its final atomic rename then fails with ENOENT even though both names refer
+@@ -34,7 +58,7 @@ ln -s "$REPO_ROOT/node_modules" "$BUILD_DIR/node_modules"
  # Build a minimal smoketest binary that imports the chunker. We compile this
  # instead of the full gbrain CLI so the failure mode is laser-focused on
  # chunker + WASM path resolution, not unrelated CLI wiring.
--bun build --compile --outfile "$OUT_BIN" scripts/chunker-smoketest.ts >/dev/null 2>&1
-+"$BUN_COMPILE_BIN" build --compile --outfile "$OUT_BIN" scripts/chunker-smoketest.ts >/dev/null 2>&1
- 
- # Run it and capture JSON output.
- OUTPUT="$("$OUT_BIN" 2>&1)"
+-if ! (cd "$BUILD_DIR" && bun build --compile --outfile "$OUT_BIN" scripts/chunker-smoketest.ts >/dev/null); then
++if ! (cd "$BUILD_DIR" && "$BUN_COMPILE_BIN" build --compile --outfile "$OUT_BIN" scripts/chunker-smoketest.ts >/dev/null); then
+   echo "[check-wasm-embedded] FAIL: bun could not compile the smoketest binary." >&2
+   exit 1
+ fi
 diff --git a/src/cli.ts b/src/cli.ts
-index b12b776f..eb60243f 100755
+index 779f0c2c8a0ac81bdd303ce0387ccf9a9d16913b..4481c6ad0c0bf24021d6fdef55ade1235567dc01 100755
 --- a/src/cli.ts
 +++ b/src/cli.ts
-@@ -644,6 +644,7 @@ async function runThinClientRouted(
+@@ -648,6 +648,7 @@ async function runThinClientRouted(
  // ============================================================================
  
  export interface BrainIdentity {
@@ -489,7 +490,7 @@ index b12b776f..eb60243f 100755
    version: string;
    engine: 'postgres' | 'pglite';
    page_count: number;
-@@ -2486,6 +2487,7 @@ ADMIN
+@@ -2517,6 +2518,7 @@ ADMIN
          [--json]                     (git-tracked vs supabase-only)
    serve                              MCP server (stdio)
    serve --http [--port N]            HTTP MCP server with OAuth 2.1
@@ -498,7 +499,7 @@ index b12b776f..eb60243f 100755
      --enable-dcr                     Enable Dynamic Client Registration (DCR clients default to authorization_code)
      --enable-dcr-insecure            Also allow the consent-bypassing client_credentials grant on DCR (implies --enable-dcr)
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index 5e30794f..74092445 100644
+index 19f2d74a7ddb164d002b9d684f07debcc85d30e7..6e047785ba8318bc904048fa4ad15312f3553c24 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
 @@ -24,6 +24,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
@@ -675,7 +676,7 @@ index 5e30794f..74092445 100644
    app.get('/admin/api/agents', requireAdmin, async (_req: Request, res: Response) => {
      try {
        // Unified view: OAuth clients + legacy API keys
-@@ -2008,10 +2127,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2022,10 +2141,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // content-type processors land.
    //
    // Events always carry untrusted_payload: true because the input came
@@ -689,7 +690,7 @@ index 5e30794f..74092445 100644
    // ---------------------------------------------------------------------------
    const ingestRateLimiter = rateLimit({
      windowMs: 10_000, // 10 seconds
-@@ -2135,8 +2253,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2149,8 +2267,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        const content = body.toString('utf8');
        const contentHash = computeContentHash(content);
        const sourceUri = (req.header('x-gbrain-source-uri') || `mcp-webhook:${authInfo.clientId}:${Date.now()}`).slice(0, 1024);
@@ -727,7 +728,7 @@ index 5e30794f..74092445 100644
  
        const event: IngestionEvent = {
          source_id: sourceId,
-@@ -2154,6 +2299,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2168,6 +2313,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
            ...(callerSlug ? { slug: callerSlug } : {}),
          },
        };
@@ -737,7 +738,7 @@ index 5e30794f..74092445 100644
  
        const validationErr = validateIngestionEvent(event);
        if (validationErr) {
-@@ -2166,23 +2314,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2180,23 +2328,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        }
  
        try {
@@ -774,7 +775,7 @@ index 5e30794f..74092445 100644
  
          const latency = Date.now() - startTime;
          try {
-@@ -2211,10 +2359,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2225,10 +2373,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          });
        } catch (err) {
          const msg = err instanceof Error ? err.message : String(err);
@@ -788,7 +789,7 @@ index 5e30794f..74092445 100644
          });
        }
  
-@@ -2229,7 +2377,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2243,7 +2391,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          if (!res.headersSent) {
            res.status(500).json({
              error: 'internal_error',
@@ -797,7 +798,7 @@ index 5e30794f..74092445 100644
            });
          }
        }
-@@ -2396,12 +2544,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2410,12 +2558,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // ---------------------------------------------------------------------------
    const clientCount = await sql`SELECT count(*)::int as count FROM oauth_clients`;
  
@@ -823,7 +824,7 @@ index 5e30794f..74092445 100644
  ║  Bind:      ${bind.padEnd(40)}║
  ║  Engine:    ${(config.engine || 'pglite').padEnd(40)}║
  ║  Issuer:    ${issuerUrl.origin.padEnd(40)}║
-@@ -2410,9 +2569,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2424,9 +2583,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
  ║  Skills:    ${skillStatus.bannerValue.padEnd(40)}║
  ║  Token TTL: ${(tokenTtl + 's').padEnd(40)}║
  ╠══════════════════════════════════════════════════════╣
@@ -836,7 +837,7 @@ index 5e30794f..74092445 100644
  ╠══════════════════════════════════════════════════════╣
  ${bootstrapFromEnv
    ? '║  Admin Token: from $GBRAIN_ADMIN_BOOTSTRAP_TOKEN     ║\n╚══════════════════════════════════════════════════════╝'
-@@ -2420,5 +2579,10 @@ ${bootstrapFromEnv
+@@ -2434,5 +2593,10 @@ ${bootstrapFromEnv
      ? '║  Admin Token: hidden (non-TTY log-leak guard)        ║\n║  set $GBRAIN_ADMIN_BOOTSTRAP_TOKEN, or pass          ║\n║  --print-admin-token on a trusted terminal.          ║\n╚══════════════════════════════════════════════════════╝'
      : `║  Admin Token (paste into /admin login):              ║\n║  ${bootstrapToken.substring(0, 50)}  ║\n║  ${bootstrapToken.substring(50).padEnd(50)}  ║\n╚══════════════════════════════════════════════════════╝`}
  `);
@@ -848,7 +849,7 @@ index 5e30794f..74092445 100644
 +  return server;
  }
 diff --git a/src/commands/serve.ts b/src/commands/serve.ts
-index ead21f2d..f03659c2 100644
+index ead21f2d3868093c11732fd73fe860ec1a66c599..f03659c22d1f7e82c496c318a59a9e4e2f583aac 100644
 --- a/src/commands/serve.ts
 +++ b/src/commands/serve.ts
 @@ -1,5 +1,8 @@
@@ -1050,10 +1051,10 @@ index ead21f2d..f03659c2 100644
    stdin: NodeJS.ReadableStream & { isTTY?: boolean };
    signals: Pick<NodeJS.Process, 'on'>;
 diff --git a/src/core/config.ts b/src/core/config.ts
-index 190485d5..43f24a90 100644
+index e92b62a46f2ec4a7510b01b80d323968b8feb67e..47524a7103b16c801da77b8037528bec30f7eb57 100644
 --- a/src/core/config.ts
 +++ b/src/core/config.ts
-@@ -166,6 +166,14 @@ export interface GBrainConfig {
+@@ -172,6 +172,14 @@ export interface GBrainConfig {
      scrub_pii?: boolean;
    };
  
@@ -1068,7 +1069,7 @@ index 190485d5..43f24a90 100644
    /**
     * v0.42 — self-upgrade settings (file plane; read on the hot path before any
     * DB connect, so it must live here, not the DB plane). `mode` is the only
-@@ -392,6 +400,26 @@ export interface GBrainConfig {
+@@ -398,6 +406,26 @@ export interface GBrainConfig {
    };
  }
  
@@ -1096,10 +1097,10 @@ index 190485d5..43f24a90 100644
   * True when this install is configured as a thin client of a remote
   * `gbrain serve --http`. Single source of truth for the "is this a
 diff --git a/src/core/engine.ts b/src/core/engine.ts
-index f87ae5d3..384eb7e2 100644
+index e7c7b62a75c6861acdea84f01192e2c5d7f79e09..c118b25e79bf7a46728c02dd88dfb502bc751f53 100644
 --- a/src/core/engine.ts
 +++ b/src/core/engine.ts
-@@ -2046,6 +2046,10 @@ export interface BrainEngine {
+@@ -2070,6 +2070,10 @@ export interface BrainEngine {
      sourceId: string,
    ): Promise<{ migrated: number }>;
  
@@ -1111,7 +1112,7 @@ index f87ae5d3..384eb7e2 100644
    getConfig(key: string): Promise<string | null>;
    setConfig(key: string, value: string): Promise<void>;
 diff --git a/src/core/import-file.ts b/src/core/import-file.ts
-index e44d7ed3..34686b7b 100644
+index e44d7ed3e49e3728a4ba6a01e3d1e8857a94ce4b..34686b7b9441bc90fcda5d3109a3361848dd68f1 100644
 --- a/src/core/import-file.ts
 +++ b/src/core/import-file.ts
 @@ -197,6 +197,8 @@ export interface ImportResult {
@@ -1185,7 +1186,7 @@ index e44d7ed3..34686b7b 100644
      ...(pageFlagged ? { flagged: true, flag_reason: pageFlagReason } : {}),
 diff --git a/src/core/ingestion/config.ts b/src/core/ingestion/config.ts
 new file mode 100644
-index 00000000..b3c602cf
+index 0000000000000000000000000000000000000000..b3c602cfbcd213079e586cba4302fb5675f149c8
 --- /dev/null
 +++ b/src/core/ingestion/config.ts
 @@ -0,0 +1,179 @@
@@ -1369,7 +1370,7 @@ index 00000000..b3c602cf
 +
 +export const __testing = { validateInstance };
 diff --git a/src/core/ingestion/daemon.ts b/src/core/ingestion/daemon.ts
-index ea69eeeb..dff27d86 100644
+index ea69eeebaf6d4ba226dedc8d9e51f4b17438b8ad..dff27d86acd62e1d043f798ab57794d7967ea40f 100644
 --- a/src/core/ingestion/daemon.ts
 +++ b/src/core/ingestion/daemon.ts
 @@ -1,17 +1,17 @@
@@ -1997,7 +1998,7 @@ index ea69eeeb..dff27d86 100644
   * Race a promise against a timeout. Rejects with the timeout message if
   * the promise hasn't settled in `ms`. Caller is responsible for cleanup
 diff --git a/src/core/ingestion/dedup.ts b/src/core/ingestion/dedup.ts
-index f4d00afd..fa16566d 100644
+index f4d00afdf2bfcfb7f1abe9bd4003761a873f3d76..fa16566d0f68bed54a8bedd444e09d57e7f926f9 100644
 --- a/src/core/ingestion/dedup.ts
 +++ b/src/core/ingestion/dedup.ts
 @@ -1,72 +1,40 @@
@@ -2191,7 +2192,7 @@ index f4d00afd..fa16566d 100644
        }
      }
 diff --git a/src/core/ingestion/index.ts b/src/core/ingestion/index.ts
-index 0424c559..b858e369 100644
+index 0424c5593f0ecb598ffb5ba3d7ee3b5dca32b151..b858e3692a4ccf473fa91b709179bafb42e9902f 100644
 --- a/src/core/ingestion/index.ts
 +++ b/src/core/ingestion/index.ts
 @@ -18,10 +18,12 @@
@@ -2209,7 +2210,7 @@ index 0424c559..b858e369 100644
  export {
 diff --git a/src/core/ingestion/service.ts b/src/core/ingestion/service.ts
 new file mode 100644
-index 00000000..0140a344
+index 0000000000000000000000000000000000000000..0140a34437e5ef2198a693f9757ade19cd139e88
 --- /dev/null
 +++ b/src/core/ingestion/service.ts
 @@ -0,0 +1,399 @@
@@ -2613,7 +2614,7 @@ index 00000000..0140a344
 +
 +export const __testing = { mapPersistenceResult, BUILTIN_COMMAND_ARCHIVE };
 diff --git a/src/core/ingestion/skillpack-load.ts b/src/core/ingestion/skillpack-load.ts
-index dea5505a..eb663b0a 100644
+index dea5505ac67a1f2b46d02e928f140e2b1eed99e2..eb663b0a8ff8327318ae721304ff010c55ce1fcb 100644
 --- a/src/core/ingestion/skillpack-load.ts
 +++ b/src/core/ingestion/skillpack-load.ts
 @@ -232,16 +232,15 @@ export async function loadSkillpackSources(
@@ -2639,7 +2640,7 @@ index dea5505a..eb663b0a 100644
        }
 diff --git a/src/core/ingestion/sources/command-archive.ts b/src/core/ingestion/sources/command-archive.ts
 new file mode 100644
-index 00000000..375e9215
+index 0000000000000000000000000000000000000000..375e9215f699e3f353cb7128ad15826898983b1b
 --- /dev/null
 +++ b/src/core/ingestion/sources/command-archive.ts
 @@ -0,0 +1,1462 @@
@@ -4106,7 +4107,7 @@ index 00000000..375e9215
 +  scanArchive,
 +};
 diff --git a/src/core/ingestion/sources/markdown-greenfield.ts b/src/core/ingestion/sources/markdown-greenfield.ts
-index 640e892a..b1b4b8e9 100644
+index 640e892ad6ee999d034b8a7dc1db720e2d993815..b1b4b8e9ce453f1a7bb89f9db5d9322289e66b59 100644
 --- a/src/core/ingestion/sources/markdown-greenfield.ts
 +++ b/src/core/ingestion/sources/markdown-greenfield.ts
 @@ -8,12 +8,10 @@
@@ -4127,7 +4128,7 @@ index 640e892a..b1b4b8e9 100644
   * Walk:
   *   - ~/git/brain/atoms/{YYYY-MM-DD}/*.md (~13K files, atoms)
 diff --git a/src/core/ingestion/test-harness.ts b/src/core/ingestion/test-harness.ts
-index f104eae4..f48c6fc1 100644
+index f104eae437a75448cb45c0fe4c16d6b2b220a58b..f48c6fc1ce55ed0559dc3452b6a621875212e237 100644
 --- a/src/core/ingestion/test-harness.ts
 +++ b/src/core/ingestion/test-harness.ts
 @@ -30,6 +30,7 @@
@@ -4224,7 +4225,7 @@ index f104eae4..f48c6fc1 100644
     * Note: this does NOT advance global setTimeout — use `Bun.sleep(ms)` or
     * `await new Promise(r => setTimeout(r, 0))` in test code if you need to
 diff --git a/src/core/ingestion/types.ts b/src/core/ingestion/types.ts
-index 4935913d..72a98f0b 100644
+index 4935913dccea88a77944b14d95e8068289568ff7..72a98f0b75be91952a9c051c871b56c0e1bb81c6 100644
 --- a/src/core/ingestion/types.ts
 +++ b/src/core/ingestion/types.ts
 @@ -68,7 +68,7 @@ export type IngestionContentType = typeof INGESTION_CONTENT_TYPES[number];
@@ -4445,7 +4446,7 @@ index 4935913d..72a98f0b 100644
  export function validateIngestionEvent(event: unknown): IngestionEventError | null {
    if (event === null || typeof event !== 'object') {
 diff --git a/src/core/migrate.ts b/src/core/migrate.ts
-index 08536824..b01217d5 100644
+index 085368246f66b4d4f33cabe0b71995ef16ac1131..b01217d52491ceab04b49dadfaa4465cf4b313b7 100644
 --- a/src/core/migrate.ts
 +++ b/src/core/migrate.ts
 @@ -5724,6 +5724,25 @@ export const MIGRATIONS: Migration[] = [
@@ -4475,7 +4476,7 @@ index 08536824..b01217d5 100644
  
  export const LATEST_VERSION = MIGRATIONS.length > 0
 diff --git a/src/core/minions/handlers/ingest-capture.ts b/src/core/minions/handlers/ingest-capture.ts
-index 7bd60aaf..9d50ae19 100644
+index 7bd60aaf98d004eb5ae09bba417265b2bcf741ef..9d50ae19a874d8a24c2514550502142ec1d4982c 100644
 --- a/src/core/minions/handlers/ingest-capture.ts
 +++ b/src/core/minions/handlers/ingest-capture.ts
 @@ -5,17 +5,10 @@
@@ -4667,7 +4668,7 @@ index 7bd60aaf..9d50ae19 100644
 -  };
  }
 diff --git a/src/core/minions/queue.ts b/src/core/minions/queue.ts
-index 0d0780fd..8e497f3d 100644
+index 0d0780fdb0ce26dcd330fce8ba601242a1bbd58e..8e497f3dea81b6b900d20774e0c7f00e5495d278 100644
 --- a/src/core/minions/queue.ts
 +++ b/src/core/minions/queue.ts
 @@ -35,6 +35,21 @@ export interface TrustedSubmitOpts {
@@ -4708,7 +4709,7 @@ index 0d0780fd..8e497f3d 100644
              `SELECT * FROM minion_jobs
               WHERE name = $1 AND queue = $2 AND status = 'waiting'
 diff --git a/src/core/minions/types.ts b/src/core/minions/types.ts
-index 7a1b5f08..8e7e6deb 100644
+index 7a1b5f08e66736de8bedd56e6b22b31e1ed9a056..8e7e6deb76149d147c8a0268ffd100d5b2a0b194 100644
 --- a/src/core/minions/types.ts
 +++ b/src/core/minions/types.ts
 @@ -130,6 +130,8 @@ export interface MinionJobInput {
@@ -4721,10 +4722,10 @@ index 7a1b5f08..8e7e6deb 100644
    // v12: scheduler polish
    /**
 diff --git a/src/core/operations.ts b/src/core/operations.ts
-index ff6dfc13..e99abcf3 100644
+index d1ee25df6be4ecf0756bd24a5f0f89b028c7845e..37b7a60967fd2aba19352c92579628eb10727c65 100644
 --- a/src/core/operations.ts
 +++ b/src/core/operations.ts
-@@ -28,6 +28,7 @@ import type { SearchResult } from './types.ts';
+@@ -30,6 +30,7 @@ import type { SearchResult } from './types.ts';
  import { CJK_SLUG_CHARS, PAGE_SLUG_SEG } from './cjk.ts';
  import * as db from './db.ts';
  import { VERSION } from '../version.ts';
@@ -4732,7 +4733,7 @@ index ff6dfc13..e99abcf3 100644
  import {
    GET_RECENT_SALIENCE_DESCRIPTION,
    FIND_ANOMALIES_DESCRIPTION,
-@@ -2415,10 +2416,13 @@ const get_health: Operation = {
+@@ -2421,10 +2422,13 @@ const get_health: Operation = {
   */
  const get_brain_identity: Operation = {
    name: 'get_brain_identity',
@@ -4748,7 +4749,7 @@ index ff6dfc13..e99abcf3 100644
      // v0.42 self-upgrade: surface a pending update on the thin-client banner
      // (bonus channel; the CLI stderr marker + `gbrain self-upgrade` are the
      // load-bearing surface). Cache-read-only, no network, fail-open.
-@@ -2435,6 +2439,7 @@ const get_brain_identity: Operation = {
+@@ -2441,6 +2445,7 @@ const get_brain_identity: Operation = {
        /* never let the banner break the op */
      }
      return {
@@ -4757,10 +4758,10 @@ index ff6dfc13..e99abcf3 100644
        engine: ctx.engine.kind,
        page_count: stats.page_count,
 diff --git a/src/core/pglite-engine.ts b/src/core/pglite-engine.ts
-index c842a08b..33de5f44 100644
+index f3a4f924c234c28b3dc31fd84c56fda9a479a711..a5cabaefdaa6cc48fed246570072de90fbc7ff6d 100644
 --- a/src/core/pglite-engine.ts
 +++ b/src/core/pglite-engine.ts
-@@ -68,6 +68,7 @@ import {
+@@ -70,6 +70,7 @@ import {
  } from './search/embedding-column.ts';
  import { hasCJK, escapeLikePattern } from './cjk.ts';
  
@@ -4768,7 +4769,7 @@ index c842a08b..33de5f44 100644
  type PGLiteDB = PGlite;
  
  // Tier 3 snapshot fast-restore. Reads a tar dump produced by
-@@ -5513,6 +5514,17 @@ export class PGLiteEngine implements BrainEngine {
+@@ -5543,6 +5544,17 @@ export class PGLiteEngine implements BrainEngine {
      );
    }
  
@@ -4787,7 +4788,7 @@ index c842a08b..33de5f44 100644
    async getConfig(key: string): Promise<string | null> {
      const { rows } = await this.db.query('SELECT value FROM config WHERE key = $1', [key]);
 diff --git a/src/core/pglite-schema.ts b/src/core/pglite-schema.ts
-index db1c762d..8b826ae1 100644
+index db1c762d5d83eaa7dbf7ac412ce3b494f2070ece..8b826ae1dfef566cf41a0f952c4a44505d3e699c 100644
 --- a/src/core/pglite-schema.ts
 +++ b/src/core/pglite-schema.ts
 @@ -432,6 +432,17 @@ INSERT INTO config (key, value) VALUES
@@ -4809,7 +4810,7 @@ index db1c762d..8b826ae1 100644
  -- Minion Jobs: BullMQ-inspired Postgres-native job queue
  -- ============================================================
 diff --git a/src/core/postgres-engine.ts b/src/core/postgres-engine.ts
-index 173e8bd2..30d90099 100644
+index 11ba60c9ad07504bc11ca5358c47af4589df9bf1..81f30975c02dd2b2a14a0127bb747d8165a8f117 100644
 --- a/src/core/postgres-engine.ts
 +++ b/src/core/postgres-engine.ts
 @@ -24,6 +24,7 @@ import { normalizeWeightForStorage } from './takes-fence.ts';
@@ -4820,7 +4821,7 @@ index 173e8bd2..30d90099 100644
  import { SCHEMA_SQL } from './schema-embedded.ts';
  import { verifySchema } from './schema-verify.ts';
  import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
-@@ -5661,6 +5662,18 @@ export class PostgresEngine implements BrainEngine {
+@@ -5677,6 +5678,18 @@ export class PostgresEngine implements BrainEngine {
      });
    }
  
@@ -4840,7 +4841,7 @@ index 173e8bd2..30d90099 100644
      return this.connRetry(async () => {
        await this.sql`
 diff --git a/src/core/schema-embedded.ts b/src/core/schema-embedded.ts
-index 0e7e2c48..c8c924fe 100644
+index 0e7e2c48e809fcfdb3b8e00a53f560cd79f9bf1e..c8c924fea11ae3c3bf0e23cda322ef911ff76131 100644
 --- a/src/core/schema-embedded.ts
 +++ b/src/core/schema-embedded.ts
 @@ -610,6 +610,19 @@ INSERT INTO config (key, value) VALUES
@@ -4864,7 +4865,7 @@ index 0e7e2c48..c8c924fe 100644
  -- access_tokens: bearer tokens for remote MCP access
  -- ============================================================
 diff --git a/src/eval/longmemeval/harness.ts b/src/eval/longmemeval/harness.ts
-index 07045df7..bcb9218b 100644
+index 07045df763865f8d00784787dc74c58536cc195d..bcb9218be28381b2fa33d7f23bb3b3480982d184 100644
 --- a/src/eval/longmemeval/harness.ts
 +++ b/src/eval/longmemeval/harness.ts
 @@ -27,6 +27,8 @@ const PRESERVE_TABLES: ReadonlySet<string> = new Set([
@@ -4877,7 +4878,7 @@ index 07045df7..bcb9218b 100644
    'gbrain_cycle_locks',
    'subagent_rate_leases',
 diff --git a/src/schema.sql b/src/schema.sql
-index 084af8d7..3ec9e5e6 100644
+index 084af8d7e60e08815df509539b1e34bd634578f2..3ec9e5e643227a85600fbecc949a7f56dc79cdee 100644
 --- a/src/schema.sql
 +++ b/src/schema.sql
 @@ -606,6 +606,19 @@ INSERT INTO config (key, value) VALUES
@@ -4902,7 +4903,7 @@ index 084af8d7..3ec9e5e6 100644
  -- ============================================================
 diff --git a/test/brain-identity-persistence.serial.test.ts b/test/brain-identity-persistence.serial.test.ts
 new file mode 100644
-index 00000000..553b637d
+index 0000000000000000000000000000000000000000..553b637d4a2511dda493d571494e9119255792e9
 --- /dev/null
 +++ b/test/brain-identity-persistence.serial.test.ts
 @@ -0,0 +1,34 @@
@@ -4941,7 +4942,7 @@ index 00000000..553b637d
 +  });
 +});
 diff --git a/test/e2e/ingestion-roundtrip.test.ts b/test/e2e/ingestion-roundtrip.test.ts
-index a0fae218..bf9a394a 100644
+index a0fae218cfe70ad34bad936f05029e5fbda12e88..bf9a394af4130d2368f3e877f16ee9876c42bc10 100644
 --- a/test/e2e/ingestion-roundtrip.test.ts
 +++ b/test/e2e/ingestion-roundtrip.test.ts
 @@ -4,14 +4,14 @@
@@ -5075,7 +5076,7 @@ index a0fae218..bf9a394a 100644
      });
  
 diff --git a/test/e2e/serve-http-ingest-webhook.test.ts b/test/e2e/serve-http-ingest-webhook.test.ts
-index 70d514ec..444d39a6 100644
+index 70d514ec525b120c73dd5b1637abff68dd895266..444d39a691575382a28efa1f85259ee89ade514f 100644
 --- a/test/e2e/serve-http-ingest-webhook.test.ts
 +++ b/test/e2e/serve-http-ingest-webhook.test.ts
 @@ -19,10 +19,10 @@
@@ -5155,7 +5156,7 @@ index 70d514ec..444d39a6 100644
      const token = await mintToken('read write');
      const first = await postIngest(
 diff --git a/test/get-brain-identity.test.ts b/test/get-brain-identity.test.ts
-index 1faca829..43701a7f 100644
+index 1faca8296112e41f92e30b24a54cbdcdf886767c..43701a7fca400cde806ec62528321b8437cab134 100644
 --- a/test/get-brain-identity.test.ts
 +++ b/test/get-brain-identity.test.ts
 @@ -2,8 +2,8 @@
@@ -5224,7 +5225,7 @@ index 1faca829..43701a7f 100644
 +  });
  });
 diff --git a/test/helpers/reset-pglite.ts b/test/helpers/reset-pglite.ts
-index d15e8634..11084fa1 100644
+index d15e863431f0ddc7c7190566588745fa3fa99c3e..11084fa11cedfdb0f96a97d4bb29a3aba75c7acd 100644
 --- a/test/helpers/reset-pglite.ts
 +++ b/test/helpers/reset-pglite.ts
 @@ -51,11 +51,10 @@
@@ -5244,7 +5245,7 @@ index d15e8634..11084fa1 100644
  export async function resetPgliteState(engine: PGLiteEngine): Promise<void> {
    const rows = await engine.executeRaw<{ tablename: string }>(
 diff --git a/test/import-dedup-frontmatter-id.test.ts b/test/import-dedup-frontmatter-id.test.ts
-index 54aa82c0..791bdcc0 100644
+index 54aa82c0439f15adaaf7ffb2ac6ce2c3148619f5..791bdcc04255f0bc4f2f18ab5b672c1d57d9305f 100644
 --- a/test/import-dedup-frontmatter-id.test.ts
 +++ b/test/import-dedup-frontmatter-id.test.ts
 @@ -72,6 +72,7 @@ describe('#1309 — overlapping-ingest-roots dedup', () => {
@@ -5265,7 +5266,7 @@ index 54aa82c0..791bdcc0 100644
      }
 diff --git a/test/ingestion/config.test.ts b/test/ingestion/config.test.ts
 new file mode 100644
-index 00000000..198dc570
+index 0000000000000000000000000000000000000000..198dc57024ecdbb4d8286f8a29a6eb73b14471f1
 --- /dev/null
 +++ b/test/ingestion/config.test.ts
 @@ -0,0 +1,281 @@
@@ -5551,7 +5552,7 @@ index 00000000..198dc570
 +  });
 +});
 diff --git a/test/ingestion/daemon.test.ts b/test/ingestion/daemon.test.ts
-index a9612de9..91bd490d 100644
+index a9612de96f52ebc80d385149c2d1e3c0a6bf08d0..91bd490d7040d99a76b90ed94ac6eea51906b741 100644
 --- a/test/ingestion/daemon.test.ts
 +++ b/test/ingestion/daemon.test.ts
 @@ -12,12 +12,12 @@
@@ -6257,7 +6258,7 @@ index a9612de9..91bd490d 100644
      daemon.register({ source });
      await daemon.start();
 diff --git a/test/ingestion/dedup.test.ts b/test/ingestion/dedup.test.ts
-index 62c73d50..27d42d6a 100644
+index 62c73d5087811c1302c9a8a2c523f03b06595f35..27d42d6a4d0347345704bc82ce9554f15f9e3744 100644
 --- a/test/ingestion/dedup.test.ts
 +++ b/test/ingestion/dedup.test.ts
 @@ -1,8 +1,8 @@
@@ -6491,7 +6492,7 @@ index 62c73d50..27d42d6a 100644
    });
  });
 diff --git a/test/ingestion/gstack-learnings.test.ts b/test/ingestion/gstack-learnings.test.ts
-index 123972b4..0942fa27 100644
+index 123972b4ee9c3daca237ed108f37d489ac4565e2..0942fa2715611b1b503a6ce03c51137d98fb16f6 100644
 --- a/test/ingestion/gstack-learnings.test.ts
 +++ b/test/ingestion/gstack-learnings.test.ts
 @@ -37,6 +37,15 @@ function makeStubCtx(): IngestionSourceContext & { emitted: IngestionEvent[] } {
@@ -6512,7 +6513,7 @@ index 123972b4..0942fa27 100644
      abortSignal: new AbortController().signal,
 diff --git a/test/ingestion/http-owner-vertical-slice.serial.test.ts b/test/ingestion/http-owner-vertical-slice.serial.test.ts
 new file mode 100644
-index 00000000..f7e59d30
+index 0000000000000000000000000000000000000000..f7e59d30671c6af84068b61f165ae2fa684d8767
 --- /dev/null
 +++ b/test/ingestion/http-owner-vertical-slice.serial.test.ts
 @@ -0,0 +1,290 @@
@@ -6807,7 +6808,7 @@ index 00000000..f7e59d30
 +  }, 45_000);
 +});
 diff --git a/test/ingestion/ingest-capture.test.ts b/test/ingestion/ingest-capture.test.ts
-index 7f4bdaf9..9cdf391c 100644
+index 7f4bdaf9448cf0063e5650cfc415b2aa9d000207..9cdf391ccac6beeebc978a217e8e9c8a12ec0b58 100644
 --- a/test/ingestion/ingest-capture.test.ts
 +++ b/test/ingestion/ingest-capture.test.ts
 @@ -16,6 +16,7 @@ import {
@@ -7038,7 +7039,7 @@ index 7f4bdaf9..9cdf391c 100644
  
    test('chunks count is reported on imported events', async () => {
 diff --git a/test/ingestion/markdown-greenfield.test.ts b/test/ingestion/markdown-greenfield.test.ts
-index 5c26a5a1..780f272e 100644
+index 5c26a5a126a07472f83648c4a08bf7b8042ce078..780f272e915bb9340562a34f25a16a64d88d7d14 100644
 --- a/test/ingestion/markdown-greenfield.test.ts
 +++ b/test/ingestion/markdown-greenfield.test.ts
 @@ -62,6 +62,15 @@ function makeCtx(): IngestionSourceContext & { emitted: IngestionEvent[]; warnin
@@ -7058,7 +7059,7 @@ index 5c26a5a1..780f272e 100644
      logger: {
        info: () => {},
 diff --git a/test/ingestion/migration-mode.test.ts b/test/ingestion/migration-mode.test.ts
-index 333dc6b2..2717e61f 100644
+index 333dc6b28ed3a937f8ab69649b33fdbafd98730a..2717e61f27c817c69a03251c1b10287cf5fdabbe 100644
 --- a/test/ingestion/migration-mode.test.ts
 +++ b/test/ingestion/migration-mode.test.ts
 @@ -1,19 +1,15 @@
@@ -7218,7 +7219,7 @@ index 333dc6b2..2717e61f 100644
  });
 diff --git a/test/ingestion/service.test.ts b/test/ingestion/service.test.ts
 new file mode 100644
-index 00000000..95d4f91f
+index 0000000000000000000000000000000000000000..95d4f91f87d989fbe772d7323fec408b62141b30
 --- /dev/null
 +++ b/test/ingestion/service.test.ts
 @@ -0,0 +1,409 @@
@@ -7632,7 +7633,7 @@ index 00000000..95d4f91f
 +  });
 +});
 diff --git a/test/ingestion/skillpack-load.test.ts b/test/ingestion/skillpack-load.test.ts
-index 7eb749fb..ba36a8da 100644
+index 7eb749fb1f631e659d65ae4f6b44f78bab76aec0..ba36a8da4986d9810058f0149503aeb8b46e2fc4 100644
 --- a/test/ingestion/skillpack-load.test.ts
 +++ b/test/ingestion/skillpack-load.test.ts
 @@ -236,6 +236,7 @@ describe('loadSkillpackSources — module loading', () => {
@@ -7645,7 +7646,7 @@ index 7eb749fb..ba36a8da 100644
    test('module without default export factory produces a warning', async () => {
 diff --git a/test/ingestion/sources/command-archive.test.ts b/test/ingestion/sources/command-archive.test.ts
 new file mode 100644
-index 00000000..0efface9
+index 0000000000000000000000000000000000000000..0efface92f20c3efe778e344089e3d21b45d57cb
 --- /dev/null
 +++ b/test/ingestion/sources/command-archive.test.ts
 @@ -0,0 +1,964 @@
@@ -8614,7 +8615,7 @@ index 00000000..0efface9
 +  });
 +});
 diff --git a/test/ingestion/test-harness.test.ts b/test/ingestion/test-harness.test.ts
-index 62576424..ecdd1e9e 100644
+index 625764244c66e5a70754cc942badaa2f3ec7fda7..ecdd1e9e878ce2971eb5d6ce3720b987eb04cf14 100644
 --- a/test/ingestion/test-harness.test.ts
 +++ b/test/ingestion/test-harness.test.ts
 @@ -115,6 +115,115 @@ describe('IngestionTestHarness lifecycle', () => {
@@ -8735,7 +8736,7 @@ index 62576424..ecdd1e9e 100644
      const bad = { ...makeEvent(), content_type: 'totally-invalid' as never };
 diff --git a/test/longmemeval-harness.test.ts b/test/longmemeval-harness.test.ts
 new file mode 100644
-index 00000000..f0d81e86
+index 0000000000000000000000000000000000000000..f0d81e863a5577622c6764dd783f97963a1b0c33
 --- /dev/null
 +++ b/test/longmemeval-harness.test.ts
 @@ -0,0 +1,24 @@
@@ -8765,7 +8766,7 @@ index 00000000..f0d81e86
 +});
 diff --git a/test/migration-v126-brain-identity.test.ts b/test/migration-v126-brain-identity.test.ts
 new file mode 100644
-index 00000000..64ca98e6
+index 0000000000000000000000000000000000000000..64ca98e650cc9acd2b2220f06cc44ed02e9bfb27
 --- /dev/null
 +++ b/test/migration-v126-brain-identity.test.ts
 @@ -0,0 +1,36 @@
@@ -8806,7 +8807,7 @@ index 00000000..64ca98e6
 +  });
 +});
 diff --git a/test/minions.test.ts b/test/minions.test.ts
-index 90148361..f8e2b7a9 100644
+index 90148361e657d22d3996146e6a5f648f2e0e6cfe..f8e2b7a9262e9f7dd75f7c7fc98276bdfe9302cd 100644
 --- a/test/minions.test.ts
 +++ b/test/minions.test.ts
 @@ -2055,6 +2055,31 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
@@ -8843,7 +8844,7 @@ index 90148361..f8e2b7a9 100644
      const b = await queue.add('uncapped', {});
 diff --git a/test/pglite-open-gates.test.ts b/test/pglite-open-gates.test.ts
 new file mode 100644
-index 00000000..3a454421
+index 0000000000000000000000000000000000000000..3a45442133604cb95049687697270618a4b3432d
 --- /dev/null
 +++ b/test/pglite-open-gates.test.ts
 @@ -0,0 +1,148 @@
@@ -8997,7 +8998,7 @@ index 00000000..3a454421
 +});
 diff --git a/test/serve-http-ingest-source-binding.test.ts b/test/serve-http-ingest-source-binding.test.ts
 new file mode 100644
-index 00000000..56abe221
+index 0000000000000000000000000000000000000000..56abe221ba5856b4cfd7d7c6f0c0e9652c3d7ba5
 --- /dev/null
 +++ b/test/serve-http-ingest-source-binding.test.ts
 @@ -0,0 +1,152 @@
@@ -9155,7 +9156,7 @@ index 00000000..56abe221
 +});
 diff --git a/test/serve-http-owner-lifecycle.test.ts b/test/serve-http-owner-lifecycle.test.ts
 new file mode 100644
-index 00000000..c910f9dd
+index 0000000000000000000000000000000000000000..c910f9ddf31f070bd963cff0278ef8b9d36fe2ae
 --- /dev/null
 +++ b/test/serve-http-owner-lifecycle.test.ts
 @@ -0,0 +1,137 @@
@@ -9298,7 +9299,7 @@ index 00000000..c910f9dd
 +});
 diff --git a/test/serve-http-startup-failure.serial.test.ts b/test/serve-http-startup-failure.serial.test.ts
 new file mode 100644
-index 00000000..c17c8a57
+index 0000000000000000000000000000000000000000..c17c8a574217fcc0af496fe6125035d466b371ad
 --- /dev/null
 +++ b/test/serve-http-startup-failure.serial.test.ts
 @@ -0,0 +1,97 @@
