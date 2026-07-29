@@ -1,4 +1,4 @@
-From 15703e740964b92647fbcdc8fc32396c2a79fb15 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 22:37:37 -0500
 Subject: [PATCH] feat(auth): grant legacy bearer source allowlists

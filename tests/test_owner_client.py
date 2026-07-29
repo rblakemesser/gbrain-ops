@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import stat
+from types import SimpleNamespace
 from datetime import date
 from pathlib import Path
 
@@ -120,6 +121,15 @@ def test_persisted_ingest_rejects_incomplete_acknowledgment() -> None:
 def test_tool_payload_accepts_structured_content() -> None:
     result = CallToolResult(content=[], structuredContent={"brain_id": "brain-fixture"})
     assert _tool_payload(result) == {"brain_id": "brain-fixture"}
+
+
+def test_tool_payload_accepts_newer_mcp_snake_case_attributes() -> None:
+    result = SimpleNamespace(
+        is_error=False,
+        structured_content={"brain_id": "brain-fixture"},
+        content=[],
+    )
+    assert _tool_payload(result) == {"brain_id": "brain-fixture"}  # type: ignore[arg-type]
 
 
 def test_tool_payload_accepts_json_array_text() -> None:

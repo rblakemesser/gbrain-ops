@@ -1,4 +1,4 @@
-From 38bc6fe710ea8f4e932febc3302d2e516535ae5f Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:45:16 -0500
 Subject: [PATCH] feat(ingestion): add supervised single-owner source service
@@ -82,7 +82,7 @@ Add declarative source configuration, command-archive adapters, acknowledged ing
  create mode 100644 test/serve-http-startup-failure.serial.test.ts
 
 diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
-index 85fe06761d68c6564646829eda7bfde2f6b1a7f9..4d05c690dd19777524d13a1c882c22625b323c99 100644
+index 49e289808f7941474333bbf7ffa86670606b5c0e..f68353889ce89feaaf094b646d1ad22d360134a3 100644
 --- a/CONTRIBUTING.md
 +++ b/CONTRIBUTING.md
 @@ -5,11 +5,15 @@
@@ -100,7 +100,7 @@ index 85fe06761d68c6564646829eda7bfde2f6b1a7f9..4d05c690dd19777524d13a1c882c2262
 +malformed and AMFI kills them with exit 137
 +([upstream issue](https://github.com/oven-sh/bun/issues/29276)).
  
- ## Project structure
+ ### Windows
  
 diff --git a/bun.lock b/bun.lock
 index 85cfdec8076669bbe60f5f41c175bd4b48a6d374..cbb56aaa76977f196e4a50e155747da63766ea18 100644
@@ -139,7 +139,7 @@ index 85cfdec8076669bbe60f5f41c175bd4b48a6d374..cbb56aaa76977f196e4a50e155747da6
  
      "body-parser/type-is": ["type-is@2.1.0", "", { "dependencies": { "content-type": "^2.0.0", "media-typer": "^1.1.0", "mime-types": "^3.0.0" } }, "sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA=="],
 diff --git a/package.json b/package.json
-index 13979ea4ffa355f03a88b12ca0ff899b7941683f..156f7312214292f1a172b8bb5130beea304cc106 100644
+index d991b290235497b365afdc2ca832b8d438e6f303..6a6d45fd37854070a76d740fa3a46016d2c16e51 100644
 --- a/package.json
 +++ b/package.json
 @@ -2,6 +2,7 @@
@@ -153,23 +153,23 @@ index 13979ea4ffa355f03a88b12ca0ff899b7941683f..156f7312214292f1a172b8bb5130beea
 @@ -43,17 +44,19 @@
      "test:full": "bun run verify && bash scripts/run-unit-parallel.sh && bun run test:slow && ([ -n \"$DATABASE_URL\" ] && bash scripts/run-e2e.sh || echo '[test:full] skipped E2E (no DATABASE_URL); run docker-compose -f docker-compose.ci.yml up + bun run test:e2e to include' 1>&2)",
      "verify": "bash scripts/run-verify-parallel.sh",
-     "check:source-config-leak": "scripts/check-source-config-leak.sh",
+     "check:source-config-leak": "bash scripts/check-source-config-leak.sh",
 +    "check:pglite-open-gates": "bun scripts/check-pglite-open-gates.ts",
-     "check:no-pii-agent-voice": "scripts/check-no-pii-in-agent-voice.sh",
-     "check:synthetic-corpus-privacy": "scripts/check-synthetic-corpus-privacy.sh",
-     "check:system-of-record": "scripts/check-system-of-record.sh",
-     "check:admin-scope-drift": "scripts/check-admin-scope-drift.sh",
-     "check:cli-exec": "scripts/check-cli-executable.sh",
--    "check:all": "scripts/check-privacy.sh && scripts/check-proposal-pii.sh && scripts/check-test-real-names.sh && scripts/check-jsonb-pattern.sh && scripts/check-source-id-projection.sh && scripts/check-source-config-leak.sh && scripts/check-progress-to-stdout.sh && scripts/check-no-tracked-symlinks.sh && scripts/check-no-legacy-getconnection.sh && scripts/check-test-isolation.sh && scripts/check-trailing-newline.sh && scripts/check-wasm-embedded.sh && scripts/check-exports-count.sh && scripts/check-admin-build.sh && scripts/check-admin-scope-drift.sh && scripts/check-cli-executable.sh && scripts/check-skill-brain-first.sh && scripts/check-operations-filter-bypass.sh && scripts/check-gateway-routed-no-direct-anthropic.sh && scripts/check-worker-pool-atomicity.sh && scripts/check-key-files-current-state.sh && scripts/check-no-double-retry.sh && scripts/check-batch-audit-site.sh",
-+    "check:all": "scripts/check-privacy.sh && scripts/check-proposal-pii.sh && scripts/check-test-real-names.sh && scripts/check-jsonb-pattern.sh && scripts/check-source-id-projection.sh && scripts/check-source-config-leak.sh && bun scripts/check-pglite-open-gates.ts && scripts/check-progress-to-stdout.sh && scripts/check-no-tracked-symlinks.sh && scripts/check-no-legacy-getconnection.sh && scripts/check-test-isolation.sh && scripts/check-trailing-newline.sh && scripts/check-wasm-embedded.sh && scripts/check-exports-count.sh && scripts/check-admin-build.sh && scripts/check-admin-scope-drift.sh && scripts/check-cli-executable.sh && scripts/check-skill-brain-first.sh && scripts/check-operations-filter-bypass.sh && scripts/check-gateway-routed-no-direct-anthropic.sh && scripts/check-worker-pool-atomicity.sh && scripts/check-key-files-current-state.sh && scripts/check-no-double-retry.sh && scripts/check-batch-audit-site.sh",
-     "check:gateway-routed": "scripts/check-gateway-routed-no-direct-anthropic.sh",
-     "check:worker-pool-atomicity": "scripts/check-worker-pool-atomicity.sh",
-     "check:doc-history": "scripts/check-key-files-current-state.sh",
+     "check:no-pii-agent-voice": "bash scripts/check-no-pii-in-agent-voice.sh",
+     "check:synthetic-corpus-privacy": "bash scripts/check-synthetic-corpus-privacy.sh",
+     "check:system-of-record": "bash scripts/check-system-of-record.sh",
+     "check:admin-scope-drift": "bash scripts/check-admin-scope-drift.sh",
+     "check:cli-exec": "bash scripts/check-cli-executable.sh",
+-    "check:all": "bash scripts/check-privacy.sh && bash scripts/check-proposal-pii.sh && bash scripts/check-test-real-names.sh && bash scripts/check-jsonb-pattern.sh && bash scripts/check-source-id-projection.sh && bash scripts/check-source-config-leak.sh && bash scripts/check-progress-to-stdout.sh && bash scripts/check-no-tracked-symlinks.sh && bash scripts/check-no-legacy-getconnection.sh && bash scripts/check-test-isolation.sh && bash scripts/check-trailing-newline.sh && bash scripts/check-wasm-embedded.sh && bash scripts/check-exports-count.sh && bash scripts/check-admin-build.sh && bash scripts/check-admin-scope-drift.sh && bash scripts/check-cli-executable.sh && bash scripts/check-skill-brain-first.sh && bash scripts/check-operations-filter-bypass.sh && bash scripts/check-gateway-routed-no-direct-anthropic.sh && bash scripts/check-worker-pool-atomicity.sh && bash scripts/check-key-files-current-state.sh && bash scripts/check-no-double-retry.sh && bash scripts/check-batch-audit-site.sh",
++    "check:all": "bash scripts/check-privacy.sh && bash scripts/check-proposal-pii.sh && bash scripts/check-test-real-names.sh && bash scripts/check-jsonb-pattern.sh && bash scripts/check-source-id-projection.sh && bash scripts/check-source-config-leak.sh && bun scripts/check-pglite-open-gates.ts && bash scripts/check-progress-to-stdout.sh && bash scripts/check-no-tracked-symlinks.sh && bash scripts/check-no-legacy-getconnection.sh && bash scripts/check-test-isolation.sh && bash scripts/check-trailing-newline.sh && bash scripts/check-wasm-embedded.sh && bash scripts/check-exports-count.sh && bash scripts/check-admin-build.sh && bash scripts/check-admin-scope-drift.sh && bash scripts/check-cli-executable.sh && bash scripts/check-skill-brain-first.sh && bash scripts/check-operations-filter-bypass.sh && bash scripts/check-gateway-routed-no-direct-anthropic.sh && bash scripts/check-worker-pool-atomicity.sh && bash scripts/check-key-files-current-state.sh && bash scripts/check-no-double-retry.sh && bash scripts/check-batch-audit-site.sh",
+     "check:gateway-routed": "bash scripts/check-gateway-routed-no-direct-anthropic.sh",
+     "check:worker-pool-atomicity": "bash scripts/check-worker-pool-atomicity.sh",
+     "check:doc-history": "bash scripts/check-key-files-current-state.sh",
      "check:resolver": "bun src/cli.ts check-resolvable --strict --skills-dir skills/",
-     "check:skill-brain-first": "scripts/check-skill-brain-first.sh",
+     "check:skill-brain-first": "bash scripts/check-skill-brain-first.sh",
 +    "check:bun-version": "bun scripts/check-bun-version-sync.mjs",
-     "check:wasm": "scripts/check-wasm-embedded.sh",
-     "check:newlines": "scripts/check-trailing-newline.sh",
+     "check:wasm": "bash scripts/check-wasm-embedded.sh",
+     "check:newlines": "bash scripts/check-trailing-newline.sh",
      "test:e2e": "bash scripts/run-e2e.sh",
 @@ -130,12 +133,12 @@
      "zod": "^4.3.6"
@@ -194,7 +194,7 @@ index 13979ea4ffa355f03a88b12ca0ff899b7941683f..156f7312214292f1a172b8bb5130beea
 +    "bun": "1.3.13"
    },
    "license": "MIT",
-   "version": "0.42.66.1",
+   "version": "0.42.67.0",
 diff --git a/scripts/check-bun-version-sync.mjs b/scripts/check-bun-version-sync.mjs
 new file mode 100644
 index 0000000000000000000000000000000000000000..00ea6b049610382fc962d1771d7ab3bc80fb7a38
@@ -479,10 +479,10 @@ index a9683ec7f4e6285d9720d3ccfcc2169d8b978785..fb6fec1ebf17431f9376a1368a320439
    exit 1
  fi
 diff --git a/src/cli.ts b/src/cli.ts
-index 779f0c2c8a0ac81bdd303ce0387ccf9a9d16913b..4481c6ad0c0bf24021d6fdef55ade1235567dc01 100755
+index 8965a2d709a48c268cff1f5bd75f86fa31addbde..63cf0e2755da527e75f1d56b90d197f2d01d668b 100755
 --- a/src/cli.ts
 +++ b/src/cli.ts
-@@ -648,6 +648,7 @@ async function runThinClientRouted(
+@@ -653,6 +653,7 @@ async function runThinClientRouted(
  // ============================================================================
  
  export interface BrainIdentity {
@@ -490,7 +490,7 @@ index 779f0c2c8a0ac81bdd303ce0387ccf9a9d16913b..4481c6ad0c0bf24021d6fdef55ade123
    version: string;
    engine: 'postgres' | 'pglite';
    page_count: number;
-@@ -2517,6 +2518,7 @@ ADMIN
+@@ -2610,6 +2611,7 @@ ADMIN
          [--json]                     (git-tracked vs supabase-only)
    serve                              MCP server (stdio)
    serve --http [--port N]            HTTP MCP server with OAuth 2.1
@@ -1097,10 +1097,10 @@ index e92b62a46f2ec4a7510b01b80d323968b8feb67e..47524a7103b16c801da77b8037528bec
   * True when this install is configured as a thin client of a remote
   * `gbrain serve --http`. Single source of truth for the "is this a
 diff --git a/src/core/engine.ts b/src/core/engine.ts
-index e7c7b62a75c6861acdea84f01192e2c5d7f79e09..c118b25e79bf7a46728c02dd88dfb502bc751f53 100644
+index 7c0e9d51ddc229968c13ff5a48728849cc676cc7..8d9a1add8b5647c7342f6f6d4aa5fe4f56ee006b 100644
 --- a/src/core/engine.ts
 +++ b/src/core/engine.ts
-@@ -2070,6 +2070,10 @@ export interface BrainEngine {
+@@ -2086,6 +2086,10 @@ export interface BrainEngine {
      sourceId: string,
    ): Promise<{ migrated: number }>;
  
@@ -1112,7 +1112,7 @@ index e7c7b62a75c6861acdea84f01192e2c5d7f79e09..c118b25e79bf7a46728c02dd88dfb502
    getConfig(key: string): Promise<string | null>;
    setConfig(key: string, value: string): Promise<void>;
 diff --git a/src/core/import-file.ts b/src/core/import-file.ts
-index e44d7ed3e49e3728a4ba6a01e3d1e8857a94ce4b..34686b7b9441bc90fcda5d3109a3361848dd68f1 100644
+index 1d6c0b17834c09695c5675455d8c8d0b06022a57..def8cee7aa41f3d9d5f1ef2dafcac54fdd6405e1 100644
 --- a/src/core/import-file.ts
 +++ b/src/core/import-file.ts
 @@ -197,6 +197,8 @@ export interface ImportResult {
@@ -4668,7 +4668,7 @@ index 7bd60aaf98d004eb5ae09bba417265b2bcf741ef..9d50ae19a874d8a24c2514550502142e
 -  };
  }
 diff --git a/src/core/minions/queue.ts b/src/core/minions/queue.ts
-index 0d0780fdb0ce26dcd330fce8ba601242a1bbd58e..8e497f3dea81b6b900d20774e0c7f00e5495d278 100644
+index 1c8334330951a13dd691b78774e96baec6007a44..0cfa5936c2383e6c2b74541bf1880b5df69a9a64 100644
 --- a/src/core/minions/queue.ts
 +++ b/src/core/minions/queue.ts
 @@ -35,6 +35,21 @@ export interface TrustedSubmitOpts {
@@ -4722,18 +4722,18 @@ index 7a1b5f08e66736de8bedd56e6b22b31e1ed9a056..8e7e6deb76149d147c8a0268ffd100d5
    // v12: scheduler polish
    /**
 diff --git a/src/core/operations.ts b/src/core/operations.ts
-index d1ee25df6be4ecf0756bd24a5f0f89b028c7845e..37b7a60967fd2aba19352c92579628eb10727c65 100644
+index 2ffccdc4eb258cb4419c777bdbe85671dfc23339..e9ba0ee2d092c11ca1f440079e6f8cb2f1082f32 100644
 --- a/src/core/operations.ts
 +++ b/src/core/operations.ts
-@@ -30,6 +30,7 @@ import type { SearchResult } from './types.ts';
- import { CJK_SLUG_CHARS, PAGE_SLUG_SEG } from './cjk.ts';
+@@ -31,6 +31,7 @@ import { CJK_SLUG_CHARS, PAGE_SLUG_SEG } from './cjk.ts';
+ import { ALL_SOURCES } from './source-id.ts';
  import * as db from './db.ts';
  import { VERSION } from '../version.ts';
 +
  import {
    GET_RECENT_SALIENCE_DESCRIPTION,
    FIND_ANOMALIES_DESCRIPTION,
-@@ -2421,10 +2422,13 @@ const get_health: Operation = {
+@@ -2431,10 +2432,13 @@ const get_health: Operation = {
   */
  const get_brain_identity: Operation = {
    name: 'get_brain_identity',
@@ -4749,7 +4749,7 @@ index d1ee25df6be4ecf0756bd24a5f0f89b028c7845e..37b7a60967fd2aba19352c92579628eb
      // v0.42 self-upgrade: surface a pending update on the thin-client banner
      // (bonus channel; the CLI stderr marker + `gbrain self-upgrade` are the
      // load-bearing surface). Cache-read-only, no network, fail-open.
-@@ -2441,6 +2445,7 @@ const get_brain_identity: Operation = {
+@@ -2451,6 +2455,7 @@ const get_brain_identity: Operation = {
        /* never let the banner break the op */
      }
      return {
@@ -4758,7 +4758,7 @@ index d1ee25df6be4ecf0756bd24a5f0f89b028c7845e..37b7a60967fd2aba19352c92579628eb
        engine: ctx.engine.kind,
        page_count: stats.page_count,
 diff --git a/src/core/pglite-engine.ts b/src/core/pglite-engine.ts
-index f3a4f924c234c28b3dc31fd84c56fda9a479a711..a5cabaefdaa6cc48fed246570072de90fbc7ff6d 100644
+index 82a5471a976426108aa0896f3fc724ad4dc4429e..e3ee03a7c596e5ada6d836ea580137d7cf7f2798 100644
 --- a/src/core/pglite-engine.ts
 +++ b/src/core/pglite-engine.ts
 @@ -70,6 +70,7 @@ import {
@@ -4769,7 +4769,7 @@ index f3a4f924c234c28b3dc31fd84c56fda9a479a711..a5cabaefdaa6cc48fed246570072de90
  type PGLiteDB = PGlite;
  
  // Tier 3 snapshot fast-restore. Reads a tar dump produced by
-@@ -5543,6 +5544,17 @@ export class PGLiteEngine implements BrainEngine {
+@@ -5581,6 +5582,17 @@ export class PGLiteEngine implements BrainEngine {
      );
    }
  
@@ -4810,7 +4810,7 @@ index db1c762d5d83eaa7dbf7ac412ce3b494f2070ece..8b826ae1dfef566cf41a0f952c4a4450
  -- Minion Jobs: BullMQ-inspired Postgres-native job queue
  -- ============================================================
 diff --git a/src/core/postgres-engine.ts b/src/core/postgres-engine.ts
-index 11ba60c9ad07504bc11ca5358c47af4589df9bf1..81f30975c02dd2b2a14a0127bb747d8165a8f117 100644
+index 9ced64cce436c50964f361d470f1071a0b1501d4..c269546563800099528fed0efefca727bb680406 100644
 --- a/src/core/postgres-engine.ts
 +++ b/src/core/postgres-engine.ts
 @@ -24,6 +24,7 @@ import { normalizeWeightForStorage } from './takes-fence.ts';
@@ -4821,7 +4821,7 @@ index 11ba60c9ad07504bc11ca5358c47af4589df9bf1..81f30975c02dd2b2a14a0127bb747d81
  import { SCHEMA_SQL } from './schema-embedded.ts';
  import { verifySchema } from './schema-verify.ts';
  import { applyChunkEmbeddingIndexPolicy, dropZombieIndexes } from './vector-index.ts';
-@@ -5677,6 +5678,18 @@ export class PostgresEngine implements BrainEngine {
+@@ -5721,6 +5722,18 @@ export class PostgresEngine implements BrainEngine {
      });
    }
  
@@ -8807,10 +8807,10 @@ index 0000000000000000000000000000000000000000..64ca98e650cc9acd2b2220f06cc44ed0
 +  });
 +});
 diff --git a/test/minions.test.ts b/test/minions.test.ts
-index 90148361e657d22d3996146e6a5f648f2e0e6cfe..f8e2b7a9262e9f7dd75f7c7fc98276bdfe9302cd 100644
+index 36d04395198d57b6f417f58c1bf7dec8b8b24dd3..9ef98d9236bc7c73078db85fd2e12ae8642125be 100644
 --- a/test/minions.test.ts
 +++ b/test/minions.test.ts
-@@ -2055,6 +2055,31 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
+@@ -2084,6 +2084,31 @@ describe('MinionQueue: v0.19.1 maxWaiting — cap correctness + race (D2/H2)', (
      expect(b2.id).toBe(b.id); // and its own cap
    });
  

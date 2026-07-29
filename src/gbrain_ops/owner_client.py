@@ -136,7 +136,13 @@ def content_hash(content: str) -> str:
 
 
 def _tool_payload(result: CallToolResult) -> dict[str, Any] | list[Any]:
-    if result.isError:
+    # mcp's Python models changed their public attributes from JSON aliases
+    # (isError / structuredContent) to snake_case names in newer releases.
+    # Accept both so the owner client remains compatible with the repository's
+    # supported ``mcp>=1.0`` range instead of depending on one transient model
+    # implementation.
+    is_error = getattr(result, "isError", getattr(result, "is_error", False))
+    if is_error:
         for block in result.content:
             if not isinstance(block, TextContent):
                 continue
@@ -147,8 +153,13 @@ def _tool_payload(result: CallToolResult) -> dict[str, Any] | list[Any]:
             if isinstance(error_value, dict) and error_value.get("error") == "page_not_found":
                 raise OwnerResourceNotFoundError("owner resource was not found")
         raise OwnerClientError("owner tool call failed")
-    if result.structuredContent is not None:
-        return dict(result.structuredContent)
+    structured_content = getattr(
+        result,
+        "structuredContent",
+        getattr(result, "structured_content", None),
+    )
+    if structured_content is not None:
+        return dict(structured_content)
     for block in result.content:
         if isinstance(block, TextContent):
             try:
