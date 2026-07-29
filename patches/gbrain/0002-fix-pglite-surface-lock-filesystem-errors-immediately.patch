@@ -1,4 +1,4 @@
-From 08aa46013063feba098d3a843d70b08b65e6e660 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:49:33 -0500
 Subject: [PATCH] fix(pglite): surface lock filesystem errors immediately
