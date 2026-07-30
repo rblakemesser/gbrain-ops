@@ -1,0 +1,133 @@
+From 7ae14346f62a6e85bf01f613daa451f1b59c2c6a Mon Sep 17 00:00:00 2001
+From: GBrain Ops <person@example.test>
+Date: Fri, 7 Aug 2026 05:25:25 -0500
+Subject: [PATCH 6/6] fix(ingestion): integrate owner with upstream HTTP
+ lifecycle
+
+---
+ src/commands/serve-http.ts                    |  4 ++
+ .../http-owner-vertical-slice.serial.test.ts  | 39 ++++++++++++-------
+ 2 files changed, 28 insertions(+), 15 deletions(-)
+
+diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
+index db005000..116cf8fe 100644
+--- a/src/commands/serve-http.ts
++++ b/src/commands/serve-http.ts
+@@ -12,6 +12,7 @@
+ 
+ import express from 'express';
+ import type { Socket } from 'net';
++import type { Server as HttpServer } from 'node:http';
+ import type { Request, Response, NextFunction } from 'express';
+ import cookieParser from 'cookie-parser';
+ import cors from 'cors';
+@@ -590,6 +591,8 @@ export interface ServeHttpOptions {
+   printAdminToken?: boolean;
+   /** Optional owner-local ingestion health and persisted-submit provider; lifecycle is owned by serve.ts. */
+   ingestionService?: Pick<IngestionService, 'healthCheck' | 'submit'>;
++  /** Test seam for observing the bound listener without changing lifecycle ownership. */
++  onListening?: (server: HttpServer) => void;
+ }
+ 
+ /**
+@@ -2768,6 +2771,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+   const clientCount = await sql`SELECT count(*)::int as count FROM oauth_clients`;
+ 
+   const httpServer = app.listen(port, bind, () => {
++    options.onListening?.(httpServer);
+     const address = httpServer.address();
+     const listeningPort = address && typeof address !== 'string' ? address.port : port;
+     console.error(`
+diff --git a/test/ingestion/http-owner-vertical-slice.serial.test.ts b/test/ingestion/http-owner-vertical-slice.serial.test.ts
+index 59ee27e9..21a90bba 100644
+--- a/test/ingestion/http-owner-vertical-slice.serial.test.ts
++++ b/test/ingestion/http-owner-vertical-slice.serial.test.ts
+@@ -1,5 +1,5 @@
+ import { afterEach, describe, expect, test } from 'bun:test';
+-import { EventEmitter } from 'node:events';
++import type { Server as HttpServer } from 'node:http';
+ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+ import { join } from 'node:path';
+ import { tmpdir } from 'node:os';
+@@ -10,7 +10,7 @@ import type { BrainEngine } from '../../src/core/engine.ts';
+ import { addSource } from '../../src/core/sources-ops.ts';
+ import { hashToken, generateToken } from '../../src/core/utils.ts';
+ import { IngestionService } from '../../src/core/ingestion/service.ts';
+-import { runServe, type HttpServerHandle, type IngestionLifecycle } from '../../src/commands/serve.ts';
++import { runServe, type IngestionLifecycle } from '../../src/commands/serve.ts';
+ import { runServeHttp, type ServeHttpOptions } from '../../src/commands/serve-http.ts';
+ import type { GBrainConfig } from '../../src/core/config.ts';
+ import type { Logger } from '../../src/core/operations.ts';
+@@ -42,7 +42,7 @@ async function commitArchive(cwd: string, message: string): Promise<void> {
+ interface Counts { pages: number; versions: number; chunks: number; embeddings: number }
+ 
+ interface RunningOwner {
+-  server: Awaited<ReturnType<typeof runServeHttp>>;
++  server: HttpServer;
+   service: IngestionService;
+   stop: () => Promise<void>;
+ }
+@@ -154,11 +154,14 @@ async function startOwner(
+   engine: PGLiteEngine,
+   cfg: GBrainConfig,
+ ): Promise<RunningOwner> {
+-  const signals = new EventEmitter();
+-  let server: Awaited<ReturnType<typeof runServeHttp>> | undefined;
++  let server: HttpServer | undefined;
+   let service: IngestionService | undefined;
+-  let resolveExit!: () => void;
+-  const exited = new Promise<void>((resolve) => { resolveExit = resolve; });
++  let resolveStarted!: () => void;
++  let rejectStarted!: (error: unknown) => void;
++  const started = new Promise<void>((resolve, reject) => {
++    resolveStarted = resolve;
++    rejectStarted = reject;
++  });
+   let disconnects = 0;
+   const originalDisconnect = engine.disconnect.bind(engine);
+   engine.disconnect = async () => {
+@@ -166,30 +169,36 @@ async function startOwner(
+     await originalDisconnect();
+   };
+ 
+-  await runServe(engine, [
++  const ownerRun = runServe(engine, [
+     '--http', '--with-ingestion', '--port', '0', '--bind', '127.0.0.1', '--suppress-bootstrap-token',
+   ], {
+-    signals: signals as unknown as Pick<NodeJS.Process, 'on'>,
+-    exit: () => resolveExit(),
++    exit: () => undefined,
+     loadConfig: () => cfg,
+     createIngestionService: () => {
+       service = new IngestionService({ engine, config: cfg, logger, _deps: { embed: deterministicEmbed } });
+       return service as IngestionLifecycle;
+     },
+-    runServeHttp: async (ownerEngine, options: ServeHttpOptions): Promise<HttpServerHandle> => {
++    runServeHttp: async (ownerEngine, options: ServeHttpOptions): Promise<void> => {
+       expect(ownerEngine).toBe(engine);
+-      server = await runServeHttp(ownerEngine, options);
+-      return server;
++      await runServeHttp(ownerEngine, {
++        ...options,
++        onListening(httpServer) {
++          server = httpServer;
++          resolveStarted();
++        },
++      });
+     },
+     cleanupDeadlineMs: 2_000,
+   });
++  ownerRun.catch(rejectStarted);
++  await started;
+   if (!server || !service) throw new Error('owner failed to retain server/service');
+   return {
+     server,
+     service,
+     stop: async () => {
+-      signals.emit('SIGTERM');
+-      await exited;
++      server!.close();
++      await ownerRun;
+       expect(disconnects).toBe(1);
+     },
+   };

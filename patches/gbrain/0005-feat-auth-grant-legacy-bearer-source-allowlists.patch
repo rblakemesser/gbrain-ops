@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 765997f09969c98ccdb8964eb059c39dc504ef22 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 22:37:37 -0500
-Subject: [PATCH] feat(auth): grant legacy bearer source allowlists
+Subject: [PATCH 5/6] feat(auth): grant legacy bearer source allowlists
 
 ---
  src/commands/auth.ts          | 30 +++++++++++++++++++++++-------
@@ -9,7 +9,7 @@ Subject: [PATCH] feat(auth): grant legacy bearer source allowlists
  2 files changed, 41 insertions(+), 8 deletions(-)
 
 diff --git a/src/commands/auth.ts b/src/commands/auth.ts
-index 0e7d233725e15234d99c1274402efcc279163189..53623a326d28d49637dc9e8ee49216e4034c80ba 100644
+index f9aab4c0..4b0b50fa 100644
 --- a/src/commands/auth.ts
 +++ b/src/commands/auth.ts
 @@ -66,7 +66,7 @@ async function withConfiguredSql<T>(
@@ -34,7 +34,7 @@ index 0e7d233725e15234d99c1274402efcc279163189..53623a326d28d49637dc9e8ee49216e4
        // JSONB write: pass the object via executeRawJsonb with an explicit
        // ::jsonb cast in the SQL string. Both engines round-trip the object
        // through the wire-protocol type oid without the v0.12.0 double-encode
-@@ -589,7 +593,7 @@ async function rescopeClient(clientId: string, args: string[]) {
+@@ -600,7 +604,7 @@ async function rescopeClient(clientId: string, args: string[]) {
   * resolved to `rest[0]` when `takesIdx === -1`, silently dropping the name on
   * the bare `gbrain auth create <name>` form.
   */
@@ -43,7 +43,7 @@ index 0e7d233725e15234d99c1274402efcc279163189..53623a326d28d49637dc9e8ee49216e4
    const takesIdx = rest.indexOf('--takes-holders');
    const takesHolders = takesIdx >= 0 && rest[takesIdx + 1]
      ? rest[takesIdx + 1].split(',').map(s => s.trim()).filter(Boolean)
-@@ -600,8 +604,15 @@ export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolder
+@@ -611,8 +615,15 @@ export function parseAuthCreateArgs(rest: string[]): { name: string; takesHolder
    const scopes = scopesValue
      ? scopesValue.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
      : undefined;
@@ -61,7 +61,7 @@ index 0e7d233725e15234d99c1274402efcc279163189..53623a326d28d49637dc9e8ee49216e4
  }
  
  export async function runAuth(args: string[]): Promise<void> {
-@@ -610,7 +621,11 @@ export async function runAuth(args: string[]): Promise<void> {
+@@ -621,7 +632,11 @@ export async function runAuth(args: string[]): Promise<void> {
      case 'create': {
        // v0.28: optional --takes-holders world,garry,brain (default: world only)
        const parsed = parseAuthCreateArgs(rest);
@@ -74,7 +74,7 @@ index 0e7d233725e15234d99c1274402efcc279163189..53623a326d28d49637dc9e8ee49216e4
        return;
      }
      case 'list': await list(); return;
-@@ -634,13 +649,14 @@ export async function runAuth(args: string[]): Promise<void> {
+@@ -645,13 +660,14 @@ export async function runAuth(args: string[]): Promise<void> {
        console.log(`GBrain Token Management
  
  Usage:
@@ -91,7 +91,7 @@ index 0e7d233725e15234d99c1274402efcc279163189..53623a326d28d49637dc9e8ee49216e4
    gbrain auth revoke <name>                                Revoke a legacy token
    gbrain auth permissions <name> set-takes-holders <h1,h2,h3>
 diff --git a/test/auth-create-args.test.ts b/test/auth-create-args.test.ts
-index 5e28150af236d2a67bd2c99be24aede5c1303586..6ab02b32f3506174789f0b01cf07f1dda97f34a6 100644
+index 5e28150a..6ab02b32 100644
 --- a/test/auth-create-args.test.ts
 +++ b/test/auth-create-args.test.ts
 @@ -5,7 +5,12 @@ describe('parseAuthCreateArgs', () => {
@@ -142,6 +142,3 @@ index 5e28150af236d2a67bd2c99be24aede5c1303586..6ab02b32f3506174789f0b01cf07f1dd
 +    });
 +  });
  });
--- 
-2.50.1 (Apple Git-155)
-
