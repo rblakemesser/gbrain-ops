@@ -34,6 +34,11 @@ MAPPING = {
         "granola_collector.py": "adapters/granola/granola_collector.py",
         "run_fresh_sync.sh": "adapters/granola/run_fresh_sync.sh",
     },
+    "plaud-to-brain": {
+        "plaud_collector.py": "adapters/plaud/plaud_collector.py",
+        "run_fresh_sync.sh": "adapters/plaud/run_fresh_sync.sh",
+        "README.md": "adapters/plaud/README.md",
+    },
     "telegram-to-brain": {
         "egress_policy.py": "adapters/telegram/egress_policy.py",
         "render_markdown.py": "adapters/telegram/render_markdown.py",

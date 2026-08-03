@@ -16,7 +16,7 @@ DEFAULT_JOBS = [
     value
     for value in os.environ.get(
         "GBRAIN_OPS_MONITOR_JOBS",
-        "gmail,calendar,messages,whatsapp,granola,telegram",
+        "gmail,calendar,messages,whatsapp,granola,plaud-fresh-sync,telegram",
     ).split(",")
     if value
 ]
