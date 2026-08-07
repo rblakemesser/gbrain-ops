@@ -1,7 +1,7 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 70b55b0130056f70095b4dda0bf425c742c0cce8 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 22:21:02 -0500
-Subject: [PATCH] feat(auth): scope legacy bearer tokens
+Subject: [PATCH 4/6] feat(auth): scope legacy bearer tokens
 
 ---
  src/commands/auth.ts          | 31 ++++++++++++++++++++++---------
@@ -12,7 +12,7 @@ Subject: [PATCH] feat(auth): scope legacy bearer tokens
  5 files changed, 48 insertions(+), 14 deletions(-)
 
 diff --git a/src/commands/auth.ts b/src/commands/auth.ts
-index af759b57664a087f2f35d52e9d74b654aa8e7f2e..0e7d233725e15234d99c1274402efcc279163189 100644
+index ce972bc4..f9aab4c0 100644
 --- a/src/commands/auth.ts
 +++ b/src/commands/auth.ts
 @@ -66,8 +66,14 @@ async function withConfiguredSql<T>(
@@ -50,7 +50,7 @@ index af759b57664a087f2f35d52e9d74b654aa8e7f2e..0e7d233725e15234d99c1274402efcc2
        console.log(`  ${token}\n`);
        console.log('Save this token — it will not be shown again.');
        console.log(`Revoke with: gbrain auth revoke "${name}"`);
-@@ -583,14 +589,19 @@ async function rescopeClient(clientId: string, args: string[]) {
+@@ -594,14 +600,19 @@ async function rescopeClient(clientId: string, args: string[]) {
   * resolved to `rest[0]` when `takesIdx === -1`, silently dropping the name on
   * the bare `gbrain auth create <name>` form.
   */
@@ -73,7 +73,7 @@ index af759b57664a087f2f35d52e9d74b654aa8e7f2e..0e7d233725e15234d99c1274402efcc2
  }
  
  export async function runAuth(args: string[]): Promise<void> {
-@@ -599,7 +610,7 @@ export async function runAuth(args: string[]): Promise<void> {
+@@ -610,7 +621,7 @@ export async function runAuth(args: string[]): Promise<void> {
      case 'create': {
        // v0.28: optional --takes-holders world,garry,brain (default: world only)
        const parsed = parseAuthCreateArgs(rest);
@@ -82,7 +82,7 @@ index af759b57664a087f2f35d52e9d74b654aa8e7f2e..0e7d233725e15234d99c1274402efcc2
        return;
      }
      case 'list': await list(); return;
-@@ -623,11 +634,13 @@ export async function runAuth(args: string[]): Promise<void> {
+@@ -634,11 +645,13 @@ export async function runAuth(args: string[]): Promise<void> {
        console.log(`GBrain Token Management
  
  Usage:
@@ -98,10 +98,10 @@ index af759b57664a087f2f35d52e9d74b654aa8e7f2e..0e7d233725e15234d99c1274402efcc2
    gbrain auth revoke <name>                                Revoke a legacy token
    gbrain auth permissions <name> set-takes-holders <h1,h2,h3>
 diff --git a/src/core/oauth-provider.ts b/src/core/oauth-provider.ts
-index 17f383a7b1bbad4640a758bc73df0e1c7d77f64a..08c72167a099fd5f4a1e0d10cdd0e8badd6ba60b 100644
+index 1979ff18..f952fa72 100644
 --- a/src/core/oauth-provider.ts
 +++ b/src/core/oauth-provider.ts
-@@ -721,12 +721,18 @@ export class GBrainOAuthProvider implements OAuthServerProvider {
+@@ -807,12 +807,18 @@ export class GBrainOAuthProvider implements OAuthServerProvider {
        const sourceGrant = permissions && typeof permissions === 'object'
          ? (permissions as Record<string, unknown>).source_id
          : undefined;
@@ -122,7 +122,7 @@ index 17f383a7b1bbad4640a758bc73df0e1c7d77f64a..08c72167a099fd5f4a1e0d10cdd0e8ba
          // Legacy tokens without an explicit permissions.source_id grant keep
          // the historical 'default' source floor. Array grants become
 diff --git a/src/mcp/http-transport.ts b/src/mcp/http-transport.ts
-index b1ee57a5ac6580fb3ead0e6bb02f0bed7994a7fb..f948f0d5605546996cb0c84b7c997da00324b7bc 100644
+index b1ee57a5..f948f0d5 100644
 --- a/src/mcp/http-transport.ts
 +++ b/src/mcp/http-transport.ts
 @@ -214,17 +214,20 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
@@ -149,7 +149,7 @@ index b1ee57a5ac6580fb3ead0e6bb02f0bed7994a7fb..f948f0d5605546996cb0c84b7c997da0
          ...(allowedSources ? { allowedSources } : {}),
        };
 diff --git a/test/auth-create-args.test.ts b/test/auth-create-args.test.ts
-index 3ce9e7758a3f20f9853f6766966ba3405b299088..5e28150af236d2a67bd2c99be24aede5c1303586 100644
+index 3ce9e775..5e28150a 100644
 --- a/test/auth-create-args.test.ts
 +++ b/test/auth-create-args.test.ts
 @@ -5,13 +5,14 @@ describe('parseAuthCreateArgs', () => {
@@ -191,10 +191,10 @@ index 3ce9e7758a3f20f9853f6766966ba3405b299088..5e28150af236d2a67bd2c99be24aede5
 +  });
  });
 diff --git a/test/oauth.test.ts b/test/oauth.test.ts
-index 66eb7d3ee08f58b4ad5f05337cf4a7a17017f186..af264ca83ffdc0a10d9316a887ddc7f47221b01c 100644
+index cd223ae8..8963ec05 100644
 --- a/test/oauth.test.ts
 +++ b/test/oauth.test.ts
-@@ -430,7 +430,7 @@ describe('verifyAccessToken', () => {
+@@ -500,7 +500,7 @@ describe('verifyAccessToken', () => {
          ${crypto.randomUUID()},
          ${'legacy-federated-agent'},
          ${hash},
@@ -203,7 +203,7 @@ index 66eb7d3ee08f58b4ad5f05337cf4a7a17017f186..af264ca83ffdc0a10d9316a887ddc7f4
        )
      `;
  
-@@ -438,6 +438,7 @@ describe('verifyAccessToken', () => {
+@@ -508,6 +508,7 @@ describe('verifyAccessToken', () => {
      expect(authInfo.clientId).toBe('legacy-federated-agent');
      expect(authInfo.sourceId).toBe('default');
      expect(authInfo.allowedSources).toEqual(['default', 'src-a', 'src-b']);
@@ -211,6 +211,3 @@ index 66eb7d3ee08f58b4ad5f05337cf4a7a17017f186..af264ca83ffdc0a10d9316a887ddc7f4
    });
  });
  
--- 
-2.50.1 (Apple Git-155)
-

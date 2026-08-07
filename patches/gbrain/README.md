@@ -4,7 +4,7 @@ The manifest pins a public upstream revision and applies patches with `git am --
 
 ## Ordered series
 
-1. `0001-feat-ingestion-add-supervised-single-owner-source-se.patch`
+1. `0001-feat-ingestion-add-supervised-single-owner-source-service.patch`
    - One coherent implementation patch because several files contain shared contract and lifecycle hunks.
    - Candidate upstream review slices, in dependency order:
      1. exact Bun 1.3.13 toolchain pin and version-sync check;
@@ -15,12 +15,14 @@ The manifest pins a public upstream revision and applies patches with `git am --
      6. configured single-owner autonomous ingestion, command/archive adapters, HTTP lifecycle, and health reporting.
 2. `0002-fix-pglite-surface-lock-filesystem-errors-immediately.patch`
    - Independent lock correctness fix. Permission, read-only-filesystem, and invalid-path errors fail immediately with the lock path and filesystem code instead of becoming a misleading contention timeout.
-3. `0003-feat-ingestion-acknowledge-persisted-http-writes-in.patch`
+3. `0003-feat-ingestion-acknowledge-persisted-http-writes-in-owner.patch`
    - Makes owner HTTP ingestion acknowledge durable persistence rather than only queue admission.
 4. `0004-feat-auth-scope-legacy-bearer-tokens.patch`
    - Adds least-privilege scopes to legacy bearer credentials.
 5. `0005-feat-auth-grant-legacy-bearer-source-allowlists.patch`
    - Adds source allowlists so scoped credentials can read only explicitly granted archives.
+6. `0006-fix-ingestion-integrate-upstream-http-lifecycle.patch`
+   - Preserves upstream's connection-draining HTTP lifecycle while starting and stopping the carried ingestion service in the same owner process.
 
 ## Verification
 
@@ -35,6 +37,8 @@ bun run typecheck
 bun test test/pglite-lock.test.ts \
   test/ingestion/service.test.ts \
   test/ingestion/sources/command-archive.test.ts \
+  test/ingestion/http-owner-vertical-slice.serial.test.ts \
+  test/serve-http-lifecycle.test.ts \
   test/serve-http-owner-lifecycle.test.ts
 ```
 
