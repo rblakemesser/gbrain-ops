@@ -1,15 +1,15 @@
-From 70b55b0130056f70095b4dda0bf425c742c0cce8 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 22:21:02 -0500
-Subject: [PATCH 4/6] feat(auth): scope legacy bearer tokens
+Subject: [PATCH] feat(auth): scope legacy bearer tokens
 
 ---
  src/commands/auth.ts          | 31 ++++++++++++++++++++++---------
- src/core/oauth-provider.ts    |  8 +++++++-
- src/mcp/http-transport.ts     |  7 +++++--
+ src/core/oauth-provider.ts    |  5 ++++-
+ src/mcp/http-transport.ts     |  5 ++++-
  test/auth-create-args.test.ts | 13 ++++++++++++-
  test/oauth.test.ts            |  3 ++-
- 5 files changed, 48 insertions(+), 14 deletions(-)
+ 5 files changed, 44 insertions(+), 13 deletions(-)
 
 diff --git a/src/commands/auth.ts b/src/commands/auth.ts
 index ce972bc4..f9aab4c0 100644
@@ -98,21 +98,20 @@ index ce972bc4..f9aab4c0 100644
    gbrain auth revoke <name>                                Revoke a legacy token
    gbrain auth permissions <name> set-takes-holders <h1,h2,h3>
 diff --git a/src/core/oauth-provider.ts b/src/core/oauth-provider.ts
-index 1979ff18..f952fa72 100644
+index 65694695..b85fb442 100644
 --- a/src/core/oauth-provider.ts
 +++ b/src/core/oauth-provider.ts
-@@ -807,12 +807,18 @@ export class GBrainOAuthProvider implements OAuthServerProvider {
-       const sourceGrant = permissions && typeof permissions === 'object'
-         ? (permissions as Record<string, unknown>).source_id
-         : undefined;
-+      const scopeGrant = permissions && typeof permissions === 'object'
-+        ? (permissions as Record<string, unknown>).scopes
-+        : undefined;
-+      const scopes = Array.isArray(scopeGrant)
-+        ? scopeGrant.filter((scope): scope is string => typeof scope === 'string' && ['read', 'write', 'admin'].includes(scope))
+@@ -797,6 +797,9 @@ export class GBrainOAuthProvider implements OAuthServerProvider {
+       const name = legacyRows[0].name as string;
+       const permissions = coerceLegacyPermissions(legacyRows[0].permissions);
+       const { sourceId, allowedSources } = parseLegacyTokenScope(permissions?.source_id);
++      const scopes = Array.isArray(permissions?.scopes)
++        ? permissions.scopes.filter((scope): scope is string => typeof scope === 'string' && ['read', 'write', 'admin'].includes(scope))
 +        : ['read', 'write', 'admin'];
-       const { sourceId, allowedSources } = parseLegacyTokenScope(sourceGrant);
-       return {
+       // #2529: thread the stored takes-holders grant, mirroring the legacy
+       // HTTP transport's validateToken (both decode via coerceLegacyPermissions
+       // + parseTakesHoldersAllowList so they cannot drift). Undefined (no array
+@@ -808,7 +811,7 @@ export class GBrainOAuthProvider implements OAuthServerProvider {
          token,
          clientId: name,
          clientName: name,
@@ -122,18 +121,11 @@ index 1979ff18..f952fa72 100644
          // Legacy tokens without an explicit permissions.source_id grant keep
          // the historical 'default' source floor. Array grants become
 diff --git a/src/mcp/http-transport.ts b/src/mcp/http-transport.ts
-index b1ee57a5..f948f0d5 100644
+index bb11864f..0ca4e0df 100644
 --- a/src/mcp/http-transport.ts
 +++ b/src/mcp/http-transport.ts
-@@ -214,17 +214,20 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
-         .catch(() => { /* fire-and-forget */ });
-       // v0.28: extract per-token takes-holder allow-list. Fail-safe default
-       // is ['world'] — a token with no permissions row sees public claims only.
--      const perms = (row as { permissions?: { takes_holders?: unknown; source_id?: unknown } }).permissions;
-+      const perms = (row as { permissions?: { takes_holders?: unknown; source_id?: unknown; scopes?: unknown } }).permissions;
-       const allowList = Array.isArray(perms?.takes_holders)
-         ? (perms!.takes_holders as unknown[]).filter(h => typeof h === 'string') as string[]
-         : ['world'];
+@@ -223,11 +223,14 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
+       const allowList = parseTakesHoldersAllowList(perms?.takes_holders) ?? ['world'];
        // #1336: honor the operator-set source grant stored on the token.
        const { sourceId, allowedSources } = parseLegacyTokenScope(perms?.source_id);
 +      const scopes = Array.isArray(perms?.scopes)
@@ -191,7 +183,7 @@ index 3ce9e775..5e28150a 100644
 +  });
  });
 diff --git a/test/oauth.test.ts b/test/oauth.test.ts
-index cd223ae8..8963ec05 100644
+index 91f32ad9..569ba52a 100644
 --- a/test/oauth.test.ts
 +++ b/test/oauth.test.ts
 @@ -500,7 +500,7 @@ describe('verifyAccessToken', () => {
@@ -209,5 +201,8 @@ index cd223ae8..8963ec05 100644
      expect(authInfo.allowedSources).toEqual(['default', 'src-a', 'src-b']);
 +    expect(authInfo.scopes).toEqual(['read']);
    });
- });
  
+   // -------------------------------------------------------------------------
+-- 
+2.50.1 (Apple Git-155)
+

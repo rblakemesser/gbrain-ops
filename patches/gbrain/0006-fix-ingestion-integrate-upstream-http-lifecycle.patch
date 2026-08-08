@@ -1,8 +1,7 @@
-From 7ae14346f62a6e85bf01f613daa451f1b59c2c6a Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Fri, 7 Aug 2026 05:25:25 -0500
-Subject: [PATCH 6/6] fix(ingestion): integrate owner with upstream HTTP
- lifecycle
+Subject: [PATCH] fix(ingestion): integrate owner with upstream HTTP lifecycle
 
 ---
  src/commands/serve-http.ts                    |  4 ++
@@ -10,7 +9,7 @@ Subject: [PATCH 6/6] fix(ingestion): integrate owner with upstream HTTP
  2 files changed, 28 insertions(+), 15 deletions(-)
 
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index db005000..116cf8fe 100644
+index 39496c5b..865bb1d6 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
 @@ -12,6 +12,7 @@
@@ -30,7 +29,7 @@ index db005000..116cf8fe 100644
  }
  
  /**
-@@ -2768,6 +2771,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2773,6 +2776,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    const clientCount = await sql`SELECT count(*)::int as count FROM oauth_clients`;
  
    const httpServer = app.listen(port, bind, () => {
@@ -131,3 +130,6 @@ index 59ee27e9..21a90bba 100644
        expect(disconnects).toBe(1);
      },
    };
+-- 
+2.50.1 (Apple Git-155)
+
