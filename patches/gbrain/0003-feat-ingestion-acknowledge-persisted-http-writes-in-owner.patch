@@ -1,8 +1,7 @@
-From 4ceb86a4d71f15c6de1060beac24f9c66aed912b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: GBrain Ops <person@example.test>
 Date: Sat, 11 Jul 2026 19:26:56 -0500
-Subject: [PATCH 3/6] feat(ingestion): acknowledge persisted HTTP writes in
- owner
+Subject: [PATCH] feat(ingestion): acknowledge persisted HTTP writes in owner
 
 ---
  src/commands/serve-http.ts                    | 54 +++++++++++++++++-
@@ -15,7 +14,7 @@ Subject: [PATCH 3/6] feat(ingestion): acknowledge persisted HTTP writes in
  7 files changed, 139 insertions(+), 5 deletions(-)
 
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index b87cea40..db005000 100644
+index 517e2a4f..39496c5b 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
 @@ -588,8 +588,8 @@ export interface ServeHttpOptions {
@@ -29,7 +28,7 @@ index b87cea40..db005000 100644
  }
  
  /**
-@@ -2486,6 +2486,56 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2491,6 +2491,56 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          return;
        }
  
@@ -267,3 +266,6 @@ index c17c8a57..858d481e 100644
            }),
          })).rejects.toThrow('GBrain HTTP owner failed to start');
        });
+-- 
+2.50.1 (Apple Git-155)
+

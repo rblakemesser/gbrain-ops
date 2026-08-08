@@ -1,8 +1,7 @@
-From 362d00a303d824ec34aa729f96c294ab35a0c69e Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Blake Messer <rblakemesser@users.noreply.github.com>
 Date: Sat, 11 Jul 2026 09:45:16 -0500
-Subject: [PATCH 1/6] feat(ingestion): add supervised single-owner source
- service
+Subject: [PATCH] feat(ingestion): add supervised single-owner source service
 
 Add declarative source configuration, command-archive adapters, acknowledged ingestion, source/root confinement, persistent brain identity, HTTP owner lifecycle, and open-gate verification.\n\nThis commit is carried by gbrain-ops until the generic product seams are upstreamed.
 ---
@@ -104,7 +103,7 @@ index d6408cd2..af24dd4b 100644
  ### Windows
  
 diff --git a/bun.lock b/bun.lock
-index 1ebc01b2..1de0a32d 100644
+index 0c084763..a2311ada 100644
 --- a/bun.lock
 +++ b/bun.lock
 @@ -36,12 +36,11 @@
@@ -140,7 +139,7 @@ index 1ebc01b2..1de0a32d 100644
  
      "body-parser/type-is": ["type-is@2.1.0", "", { "dependencies": { "content-type": "^2.0.0", "media-typer": "^1.1.0", "mime-types": "^3.0.0" } }, "sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA=="],
 diff --git a/package.json b/package.json
-index 6fe3d3b4..75dddc03 100644
+index 70a55c65..76db7a0b 100644
 --- a/package.json
 +++ b/package.json
 @@ -2,6 +2,7 @@
@@ -196,7 +195,7 @@ index 6fe3d3b4..75dddc03 100644
 +    "bun": "1.3.13"
    },
    "license": "MIT",
-   "version": "0.42.73.2",
+   "version": "0.42.74.0",
 diff --git a/scripts/check-bun-version-sync.mjs b/scripts/check-bun-version-sync.mjs
 new file mode 100644
 index 00000000..00ea6b04
@@ -501,7 +500,7 @@ index 35786d45..cd7e6a9d 100755
      --enable-dcr                     Enable Dynamic Client Registration (DCR clients default to authorization_code)
      --enable-dcr-insecure            Also allow the consent-bypassing client_credentials grant on DCR (implies --enable-dcr)
 diff --git a/src/commands/serve-http.ts b/src/commands/serve-http.ts
-index 4940fbb8..b87cea40 100644
+index cb4bad1c..517e2a4f 100644
 --- a/src/commands/serve-http.ts
 +++ b/src/commands/serve-http.ts
 @@ -25,6 +25,7 @@ import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
@@ -678,7 +677,7 @@ index 4940fbb8..b87cea40 100644
    app.get('/admin/api/agents', requireAdmin, async (_req: Request, res: Response) => {
      try {
        // Unified view: OAuth clients + legacy API keys
-@@ -2156,10 +2275,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2161,10 +2280,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    // content-type processors land.
    //
    // Events always carry untrusted_payload: true because the input came
@@ -692,7 +691,7 @@ index 4940fbb8..b87cea40 100644
    // ---------------------------------------------------------------------------
    const ingestRateLimiter = rateLimit({
      windowMs: 10_000, // 10 seconds
-@@ -2283,8 +2401,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2288,8 +2406,35 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        const content = body.toString('utf8');
        const contentHash = computeContentHash(content);
        const sourceUri = (req.header('x-gbrain-source-uri') || `mcp-webhook:${authInfo.clientId}:${Date.now()}`).slice(0, 1024);
@@ -730,7 +729,7 @@ index 4940fbb8..b87cea40 100644
  
        // Slug-bound clients cannot use /ingest at all. The route hands its
        // payload to the ingest_capture minion handler, which deliberately
-@@ -2327,6 +2472,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2332,6 +2477,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
            ...(callerSlug ? { slug: callerSlug } : {}),
          },
        };
@@ -740,7 +739,7 @@ index 4940fbb8..b87cea40 100644
  
        const validationErr = validateIngestionEvent(event);
        if (validationErr) {
-@@ -2339,23 +2487,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2344,23 +2492,23 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
        }
  
        try {
@@ -777,7 +776,7 @@ index 4940fbb8..b87cea40 100644
  
          const latency = Date.now() - startTime;
          try {
-@@ -2384,10 +2532,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2389,10 +2537,10 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          });
        } catch (err) {
          const msg = err instanceof Error ? err.message : String(err);
@@ -791,7 +790,7 @@ index 4940fbb8..b87cea40 100644
          });
        }
  
-@@ -2402,7 +2550,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2407,7 +2555,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
          if (!res.headersSent) {
            res.status(500).json({
              error: 'internal_error',
@@ -800,7 +799,7 @@ index 4940fbb8..b87cea40 100644
            });
          }
        }
-@@ -2570,11 +2718,13 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2575,11 +2723,13 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
    const clientCount = await sql`SELECT count(*)::int as count FROM oauth_clients`;
  
    const httpServer = app.listen(port, bind, () => {
@@ -815,7 +814,7 @@ index 4940fbb8..b87cea40 100644
  ║  Bind:      ${bind.padEnd(40)}║
  ║  Engine:    ${(config.engine || 'pglite').padEnd(40)}║
  ║  Issuer:    ${issuerUrl.origin.padEnd(40)}║
-@@ -2583,9 +2733,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
+@@ -2588,9 +2738,9 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
  ║  Skills:    ${skillStatus.bannerValue.padEnd(40)}║
  ║  Token TTL: ${(tokenTtl + 's').padEnd(40)}║
  ╠══════════════════════════════════════════════════════╣
@@ -4646,7 +4645,7 @@ index 7a1b5f08..8e7e6deb 100644
    // v12: scheduler polish
    /**
 diff --git a/src/core/operations.ts b/src/core/operations.ts
-index 0b21f539..f8b0da43 100644
+index 78f334cc..21c6d5c5 100644
 --- a/src/core/operations.ts
 +++ b/src/core/operations.ts
 @@ -31,6 +31,7 @@ import { CJK_SLUG_CHARS, PAGE_SLUG_SEG } from './cjk.ts';
@@ -4657,7 +4656,7 @@ index 0b21f539..f8b0da43 100644
  import {
    GET_RECENT_SALIENCE_DESCRIPTION,
    FIND_ANOMALIES_DESCRIPTION,
-@@ -2679,10 +2680,13 @@ const get_health: Operation = {
+@@ -2695,10 +2696,13 @@ const get_health: Operation = {
   */
  const get_brain_identity: Operation = {
    name: 'get_brain_identity',
@@ -4673,7 +4672,7 @@ index 0b21f539..f8b0da43 100644
      // v0.42 self-upgrade: surface a pending update on the thin-client banner
      // (bonus channel; the CLI stderr marker + `gbrain self-upgrade` are the
      // load-bearing surface). Cache-read-only, no network, fail-open.
-@@ -2699,6 +2703,7 @@ const get_brain_identity: Operation = {
+@@ -2715,6 +2719,7 @@ const get_brain_identity: Operation = {
        /* never let the banner break the op */
      }
      return {
@@ -9282,3 +9281,6 @@ index 00000000..c17c8a57
 +    expect(disconnects()).toBe(1);
 +  });
 +});
+-- 
+2.50.1 (Apple Git-155)
+
