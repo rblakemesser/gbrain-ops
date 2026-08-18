@@ -10,7 +10,7 @@ First-class Plaud personal-library ingestion using the official `@plaud-ai/mcp` 
 - Every generated item in Plaud's `note_list`.
 - Private current normalized source snapshots plus immutable semantic revisions.
 - Temporary signed audio/data URLs and OAuth material are redacted before archival.
-- Recent recordings are refreshed every run; a complete catalog/content audit runs at least daily because Plaud exposes no `updated_at`, webhook, or tombstone feed.
+- New recordings and a short recent window are prioritized every run. Older recordings are audited in bounded least-recently-checked batches, targeting a complete daily catalog/content audit over successive hourly runs because Plaud exposes no `updated_at`, webhook, or tombstone feed.
 - The MCP child receives only a minimal Plaud/runtime environment and runs with official telemetry disabled.
 - Linked note bodies are fetched in memory from Plaud's HTTPS capability URL, then the URL is removed before archival.
 - No audio download, speaker inference, contact matching, or upstream deletion propagation.
@@ -32,8 +32,13 @@ GBRAIN_OWNER_CREDENTIALS=~/.gbrain/owner/clients/plaud.json
 Optional tuning:
 
 ```text
-GBRAIN_OPS_RECENT_DAYS=30
+GBRAIN_OPS_RECENT_DAYS=3
 GBRAIN_OPS_FULL_AUDIT_HOURS=24
+GBRAIN_OPS_MAX_RECORDINGS=20
+GBRAIN_OPS_PLAUD_RATE_LIMIT_RETRY_SECONDS=65
+GBRAIN_OPS_PLAUD_MAX_ATTEMPTS=2
+GBRAIN_OPS_PLAUD_CALL_TIMEOUT_SECONDS=60
+GBRAIN_OPS_PLAUD_COLLECTION_TIMEOUT_SECONDS=900
 ```
 
 Authenticate once after installing the official MCP package:

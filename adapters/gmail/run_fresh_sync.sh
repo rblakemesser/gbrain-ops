@@ -16,8 +16,6 @@ mkdir -p "$LOG_ROOT"
 
 {
   "$PYTHON" "$HERE/email_collector.py" recent --days "$RECENT_DAYS" --workers 1
-  "$PYTHON" "$HERE/classify_archive.py"
-  "$PYTHON" "$HERE/promote_archive.py"
 } >"$LOG_ROOT/collector-latest.log" 2>&1
 PYTHONPATH="$GBRAIN_OPS_REPO/src${PYTHONPATH:+:$PYTHONPATH}" \
   "$PYTHON" "$GBRAIN_OPS_REPO/scripts/reconcile_archive.py" \
@@ -26,12 +24,5 @@ PYTHONPATH="$GBRAIN_OPS_REPO/src${PYTHONPATH:+:$PYTHONPATH}" \
   --receipt-root "$RECEIPT_ROOT" \
   --glob 'email/**/*.md' \
   --dated-within-days "$((RECENT_DAYS + 2))" \
-  --summary-only
-PYTHONPATH="$GBRAIN_OPS_REPO/src${PYTHONPATH:+:$PYTHONPATH}" \
-  "$PYTHON" "$GBRAIN_OPS_REPO/scripts/reconcile_archive.py" \
-  --credentials "$GBRAIN_OWNER_CREDENTIALS" \
-  --root "$ARCHIVE_ROOT" \
-  --receipt-root "$RECEIPT_ROOT" \
-  --glob 'promoted/**/*.md' \
   --summary-only
 printf '%s\n' 'collector=gmail status=acknowledged'

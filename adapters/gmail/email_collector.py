@@ -11,10 +11,6 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Iterable
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-
 HERMES_HOME = Path(os.environ.get('HERMES_HOME', Path.home() / '.hermes')).expanduser()
 TOKEN_PATH = Path(os.environ.get('GBRAIN_OPS_GMAIL_TOKEN', HERMES_HOME / 'google_token_gmail.json')).expanduser()
 ROOT = Path(os.environ.get('GBRAIN_OPS_GMAIL_ROOT', Path.home() / '.local/share/gbrain-ops/gmail')).expanduser()
@@ -82,7 +78,10 @@ def save_state(state: dict) -> None:
     atomic_write_json(STATE_PATH, state)
 
 
-def get_creds() -> Credentials:
+def get_creds():
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
     creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
@@ -91,6 +90,8 @@ def get_creds() -> Credentials:
 
 
 def gmail_service():
+    from googleapiclient.discovery import build
+
     return build('gmail', 'v1', credentials=get_creds(), cache_discovery=False)
 
 
@@ -110,6 +111,15 @@ def header_map(payload: dict) -> dict[str, str]:
 
 def normalize_account_slug(email: str) -> str:
     return re.sub(r'[^a-z0-9]+', '-', email.lower()).strip('-')
+
+
+def render_one_line(value: object) -> str:
+    """Normalize source text for one-line Markdown without mutating raw records."""
+
+    text = str(value or '').replace('\x00', '')
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace('\u2028', '\n').replace('\u2029', '\n')
+    return ' '.join(text.split())
 
 
 def classify_noise(sender: str, subject: str) -> bool:
@@ -247,6 +257,9 @@ def render_day_page(day: str, account_email: str, records: list[dict]) -> str:
         lines.extend([f'## {heading}', ''])
         for r in items:
             ts = r['timestamp_utc'][11:16]
+            sender = render_one_line(r['from']) or '(unknown)'
+            subject = render_one_line(r['subject'])
+            snippet = render_one_line(r['snippet'])
             flags = []
             if r['is_unread']:
                 flags.append('unread')
@@ -255,10 +268,10 @@ def render_day_page(day: str, account_email: str, records: list[dict]) -> str:
             if r['is_important']:
                 flags.append('important')
             flag_txt = f" ({', '.join(flags)})" if flags else ''
-            lines.append(f"- {ts} | From: {r['from'] or '(unknown)'}{flag_txt}")
-            lines.append(f"  - Subject: {r['subject']}")
-            if r['snippet']:
-                lines.append(f"  - Snippet: {r['snippet']}")
+            lines.append(f"- {ts} | From: {sender}{flag_txt}")
+            lines.append(f"  - Subject: {subject}")
+            if snippet:
+                lines.append(f"  - Snippet: {snippet}")
             lines.append(f"  - [Open in Gmail]({r['gmail_link']})")
             lines.append(f"  - Labels: {', '.join(r['labelIds']) if r['labelIds'] else '(none)'}")
             lines.append('')
@@ -297,8 +310,11 @@ def write_digest(account_email: str, records: list[dict], label: str) -> Path:
             lines.extend(['(none)', ''])
             continue
         for r in items:
-            lines.append(f"- {r['day']} {r['timestamp_utc'][11:16]} | {r['from'] or '(unknown)'} | {r['subject']}")
-            lines.append(f"  - {r['snippet']}")
+            sender = render_one_line(r['from']) or '(unknown)'
+            subject = render_one_line(r['subject'])
+            snippet = render_one_line(r['snippet'])
+            lines.append(f"- {r['day']} {r['timestamp_utc'][11:16]} | {sender} | {subject}")
+            lines.append(f"  - {snippet}")
             lines.append(f"  - [Open in Gmail]({r['gmail_link']})")
         lines.append('')
     atomic_write_text(path, '\n'.join(lines).rstrip() + '\n')
