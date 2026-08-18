@@ -11,10 +11,6 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Iterable
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-
 HERMES_HOME = Path(os.environ.get('HERMES_HOME', Path.home() / '.hermes')).expanduser()
 TOKEN_PATH = Path(os.environ.get('GBRAIN_OPS_GMAIL_TOKEN', HERMES_HOME / 'google_token_gmail.json')).expanduser()
 ROOT = Path(os.environ.get('GBRAIN_OPS_GMAIL_ROOT', Path.home() / '.local/share/gbrain-ops/gmail')).expanduser()
@@ -82,7 +78,10 @@ def save_state(state: dict) -> None:
     atomic_write_json(STATE_PATH, state)
 
 
-def get_creds() -> Credentials:
+def get_creds():
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+
     creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
@@ -91,6 +90,8 @@ def get_creds() -> Credentials:
 
 
 def gmail_service():
+    from googleapiclient.discovery import build
+
     return build('gmail', 'v1', credentials=get_creds(), cache_discovery=False)
 
 
