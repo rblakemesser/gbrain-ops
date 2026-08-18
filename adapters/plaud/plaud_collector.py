@@ -20,6 +20,7 @@ import shlex
 import socket
 import sys
 import tempfile
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -56,6 +57,30 @@ JsonObject = dict[str, Any]
 
 class PlaudSourceError(RuntimeError):
     """Raised when Plaud violates the supported collector contract."""
+
+
+class PlaudRateLimitError(PlaudSourceError):
+    """Raised when Plaud keeps throttling after bounded retries."""
+
+
+class PlaudSourceUnavailableError(PlaudSourceError):
+    """Raised when a Plaud source call exceeds its bounded timeout."""
+
+
+def _failure_class(error: Exception) -> str:
+    if isinstance(error, PlaudRateLimitError):
+        return "rate_limited"
+    if isinstance(error, PlaudSourceUnavailableError):
+        return "source_unavailable"
+    if isinstance(error, PlaudSourceError):
+        return "source_error"
+    return "unexpected_error"
+
+
+def _is_rate_limit_error(text: str) -> bool:
+    lowered = text.casefold()
+    markers = ("too many requests", "rate limit", "rate-limit", "throttl", "resource_exhausted")
+    return ("429" in lowered and any(marker in lowered for marker in markers)) or "resource_exhausted" in lowered
 
 
 class PlaudSource(Protocol):
@@ -177,7 +202,16 @@ def _validate_response_peer(response: httpx.Response) -> None:
 class PlaudMcpSource:
     """Small typed boundary around Plaud's official local MCP server."""
 
-    def __init__(self, command: str, args: list[str], *, cwd: Path | None = None) -> None:
+    def __init__(
+        self,
+        command: str,
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        rate_limit_retry_seconds: float | None = None,
+        max_attempts: int | None = None,
+        call_timeout_seconds: float | None = None,
+    ) -> None:
         self.command = command
         self.args = args
         self.cwd = cwd
@@ -188,6 +222,27 @@ class PlaudMcpSource:
         self._session: ClientSession | None = None
         self._stdio_entered = False
         self._session_entered = False
+        self.rate_limit_retry_seconds = (
+            float(os.environ.get("GBRAIN_OPS_PLAUD_RATE_LIMIT_RETRY_SECONDS", "65"))
+            if rate_limit_retry_seconds is None
+            else rate_limit_retry_seconds
+        )
+        self.max_attempts = (
+            int(os.environ.get("GBRAIN_OPS_PLAUD_MAX_ATTEMPTS", "2"))
+            if max_attempts is None
+            else max_attempts
+        )
+        self.call_timeout_seconds = (
+            float(os.environ.get("GBRAIN_OPS_PLAUD_CALL_TIMEOUT_SECONDS", "60"))
+            if call_timeout_seconds is None
+            else call_timeout_seconds
+        )
+        if self.rate_limit_retry_seconds < 0:
+            raise ValueError("Plaud rate-limit retry delay must not be negative")
+        if self.max_attempts < 1:
+            raise ValueError("Plaud max attempts must be positive")
+        if self.call_timeout_seconds <= 0:
+            raise ValueError("Plaud call timeout must be positive")
 
     async def __aenter__(self) -> "PlaudMcpSource":
         params = StdioServerParameters(
@@ -234,19 +289,31 @@ class PlaudMcpSource:
     async def _call_text(self, name: str, arguments: JsonObject | None = None) -> str:
         if self._session is None:
             raise PlaudSourceError("Plaud MCP session is not initialized")
-        result = await self._session.call_tool(name, arguments=arguments or {})
-        is_error = bool(getattr(result, "isError", False) or getattr(result, "is_error", False))
-        chunks = [
-            str(getattr(item, "text"))
-            for item in getattr(result, "content", [])
-            if getattr(item, "text", None) is not None
-        ]
-        text = "\n".join(chunks).strip()
-        if is_error:
-            raise PlaudSourceError(f"Plaud MCP tool {name} failed")
-        if not text:
-            raise PlaudSourceError(f"Plaud MCP tool {name} returned no text")
-        return text
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                result = await asyncio.wait_for(
+                    self._session.call_tool(name, arguments=arguments or {}),
+                    timeout=self.call_timeout_seconds,
+                )
+            except TimeoutError as exc:
+                raise PlaudSourceUnavailableError(f"Plaud MCP tool {name} timed out") from exc
+            is_error = bool(getattr(result, "isError", False) or getattr(result, "is_error", False))
+            chunks = [
+                str(getattr(item, "text"))
+                for item in getattr(result, "content", [])
+                if getattr(item, "text", None) is not None
+            ]
+            text = "\n".join(chunks).strip()
+            if not is_error:
+                if not text:
+                    raise PlaudSourceError(f"Plaud MCP tool {name} returned no text")
+                return text
+            if not _is_rate_limit_error(text):
+                raise PlaudSourceError(f"Plaud MCP tool {name} failed")
+            if attempt >= self.max_attempts:
+                raise PlaudRateLimitError(f"Plaud MCP tool {name} remained rate limited")
+            await asyncio.sleep(self.rate_limit_retry_seconds * attempt)
+        raise AssertionError("Plaud MCP retry loop did not return or raise")
 
     @staticmethod
     def _json_prefix(text: str, *, tool: str) -> Any:
@@ -538,29 +605,86 @@ def select_recordings(
     mode: str,
     recent_days: int,
     full_audit_hours: int,
+    max_recordings: int = 20,
     now: datetime,
 ) -> Selection:
-    if recent_days <= 0 or full_audit_hours <= 0:
-        raise ValueError("recent_days and full_audit_hours must be positive")
+    if recent_days <= 0 or full_audit_hours <= 0 or max_recordings <= 0:
+        raise ValueError("recent_days, full_audit_hours, and max_recordings must be positive")
     if mode == "backfill":
         return Selection(recordings=list(catalog), full_audit=True)
     if mode != "recent":
         raise ValueError(f"unsupported Plaud sync mode: {mode}")
 
+    raw_known = state.get("files")
+    known: dict[str, Any] = raw_known if isinstance(raw_known, dict) else {}
     last_full = _parse_datetime(state.get("last_full_audit_at"))
-    full_due = last_full is None or now.astimezone(UTC) - last_full >= timedelta(hours=full_audit_hours)
-    if full_due:
-        return Selection(recordings=list(catalog), full_audit=True)
-
-    known = state.get("files") if isinstance(state.get("files"), dict) else {}
     cutoff = now.astimezone(UTC) - timedelta(days=recent_days)
-    selected: list[JsonObject] = []
+    audit_cutoff = now.astimezone(UTC) - timedelta(hours=full_audit_hours)
+    unknown: list[tuple[float, str, JsonObject]] = []
+    recent: list[tuple[float, str, JsonObject]] = []
+    eligible: dict[str, tuple[float, JsonObject]] = {}
+    due_ids: set[str] = set()
     for item in catalog:
         recording_id = _validate_recording_id(item.get("id"))
         observed = _parse_datetime(item.get("start_at") or item.get("created_at"))
-        if recording_id not in known or observed is None or observed >= cutoff:
+        state_entry = known.get(recording_id)
+        if not isinstance(state_entry, dict):
+            state_entry = {}
+        last_checked = _parse_datetime(state_entry.get("last_checked_at")) or last_full
+        checked_key = last_checked.timestamp() if last_checked is not None else float("-inf")
+        last_failed = _parse_datetime(state_entry.get("last_failed_at"))
+        audit_order_key = max(
+            checked_key,
+            last_failed.timestamp() if last_failed is not None else float("-inf"),
+        )
+        observed_key = observed.timestamp() if observed is not None else float("inf")
+        is_unknown = recording_id not in known
+        is_recent = observed is None or observed >= cutoff
+        is_due = last_checked is None or last_checked <= audit_cutoff
+        if is_due:
+            due_ids.add(recording_id)
+        if is_unknown:
+            unknown.append((-observed_key, recording_id, item))
+            eligible[recording_id] = (audit_order_key, item)
+        elif is_recent:
+            recent.append((audit_order_key, recording_id, item))
+            eligible[recording_id] = (audit_order_key, item)
+        if is_due:
+            eligible[recording_id] = (audit_order_key, item)
+
+    selected: list[JsonObject] = []
+    selected_ids: set[str] = set()
+
+    def add(values: list[tuple[float, str, JsonObject]], limit: int) -> None:
+        for _, recording_id, item in sorted(values):
+            if len(selected) >= limit or recording_id in selected_ids:
+                continue
             selected.append(item)
-    return Selection(recordings=selected, full_audit=False)
+            selected_ids.add(recording_id)
+
+    # New source IDs cannot be missed. After those, prioritize the entire recent
+    # window up to the hard cap and spend remaining capacity on the oldest due
+    # audit entries. Updated last_checked_at values rotate the old-recording
+    # batch on the next hourly run instead of replaying the same prefix forever.
+    add(unknown, max_recordings)
+    add(recent, max_recordings)
+    remaining = [
+        (
+            0 if recording_id in due_ids else 1,
+            checked_key,
+            recording_id,
+            item,
+        )
+        for recording_id, (checked_key, item) in eligible.items()
+        if recording_id not in selected_ids
+    ]
+    for _, _, recording_id, item in sorted(remaining):
+        if len(selected) >= max_recordings:
+            break
+        selected.append(item)
+        selected_ids.add(recording_id)
+    full_audit = bool(due_ids) and due_ids.issubset(selected_ids)
+    return Selection(recordings=selected, full_audit=full_audit)
 
 
 async def fetch_full_transcript(
@@ -859,8 +983,12 @@ async def collect_from_source(
     mode: str,
     recent_days: int = 30,
     full_audit_hours: int = 24,
+    max_recordings: int = 20,
+    collection_timeout_seconds: float = 900,
     now: datetime | None = None,
 ) -> JsonObject:
+    if collection_timeout_seconds <= 0:
+        raise ValueError("Plaud collection timeout must be positive")
     run_time = (now or datetime.now(UTC)).astimezone(UTC)
     observed_at = _iso_z(run_time)
     paths = CollectorPaths.from_root(root)
@@ -868,7 +996,8 @@ async def collect_from_source(
     state = _load_json(paths.state_path, {})
     if not isinstance(state, dict):
         raise PlaudSourceError("Plaud state must be an object")
-    files_state = state.get("files") if isinstance(state.get("files"), dict) else {}
+    raw_files_state = state.get("files")
+    files_state: dict[str, JsonObject] = raw_files_state if isinstance(raw_files_state, dict) else {}
 
     catalog = await list_all_recordings(source)
     selection = select_recordings(
@@ -877,37 +1006,41 @@ async def collect_from_source(
         mode=mode,
         recent_days=recent_days,
         full_audit_hours=full_audit_hours,
+        max_recordings=max_recordings,
         now=run_time,
     )
 
     hydrated: list[HydratedRecording] = []
     failures: list[tuple[str, Exception]] = []
-    for item in selection.recordings:
-        recording_id = _validate_recording_id(item.get("id"))
-        state_entry = files_state.get(recording_id)
-        if not isinstance(state_entry, dict):
-            state_entry = {}
-        try:
-            hydrated.append(await hydrate_recording(source, paths, item, state_entry))
-        except Exception as exc:  # noqa: BLE001 - aggregate without leaking meeting content
-            failures.append((recording_id, exc))
-    if failures:
-        _atomic_json(
-            paths.summary_path,
-            {
-                "schema": SUMMARY_SCHEMA,
-                "status": "error",
-                "mode": mode,
-                "catalog_count": len(catalog),
-                "selected_count": len(selection.recordings),
-                "failure_count": len(failures),
-                "completed_at": observed_at,
-            },
+    deferred_count = 0
+    current_index = -1
+    current_recording_id = "batch"
+    try:
+        async with asyncio.timeout(collection_timeout_seconds):
+            for index, item in enumerate(selection.recordings):
+                current_index = index
+                recording_id = _validate_recording_id(item.get("id"))
+                current_recording_id = recording_id
+                state_entry = files_state.get(recording_id)
+                if not isinstance(state_entry, dict):
+                    state_entry = {}
+                try:
+                    hydrated.append(await hydrate_recording(source, paths, item, state_entry))
+                except (PlaudRateLimitError, PlaudSourceUnavailableError) as exc:
+                    failures.append((recording_id, exc))
+                    deferred_count = len(selection.recordings) - index - 1
+                    break
+                except Exception as exc:  # noqa: BLE001 - aggregate without leaking meeting content
+                    failures.append((recording_id, exc))
+    except TimeoutError:
+        failures.append(
+            (
+                current_recording_id,
+                PlaudSourceUnavailableError("Plaud hydration budget was exhausted"),
+            )
         )
-        first_id, first_error = failures[0]
-        raise PlaudSourceError(
-            f"failed to hydrate {len(failures)} Plaud recording(s); first={first_id}: {type(first_error).__name__}"
-        ) from first_error
+        deferred_count = max(0, len(selection.recordings) - current_index - 1)
+    failure_classes = Counter(_failure_class(error) for _, error in failures)
 
     collector = {
         "name": "gbrain-ops-plaud",
@@ -920,7 +1053,13 @@ async def collect_from_source(
     unchanged_pages = 0
     preserved_transcripts = 0
     preserved_notes = 0
-    next_files = dict(files_state)
+    next_files: dict[str, JsonObject] = dict(files_state)
+    for recording_id, error in failures:
+        previous_entry = next_files.get(recording_id)
+        failure_entry = dict(previous_entry) if isinstance(previous_entry, dict) else {}
+        failure_entry["last_failed_at"] = observed_at
+        failure_entry["last_failure_class"] = _failure_class(error)
+        next_files[recording_id] = failure_entry
     for recording in hydrated:
         revisions_written += int(
             _write_revision(
@@ -961,9 +1100,15 @@ async def collect_from_source(
         "files": next_files,
         "last_catalog_at": observed_at,
         "catalog_count": len(catalog),
-        "last_success_at": observed_at,
     }
-    if selection.full_audit:
+    if failures:
+        next_state["last_partial_at"] = observed_at
+        if state.get("last_success_at"):
+            next_state["last_success_at"] = state["last_success_at"]
+    else:
+        next_state["last_success_at"] = observed_at
+    completed_full_audit = selection.full_audit and not failures and deferred_count == 0
+    if completed_full_audit:
         next_state["last_full_audit_at"] = observed_at
     elif state.get("last_full_audit_at"):
         next_state["last_full_audit_at"] = state["last_full_audit_at"]
@@ -971,9 +1116,9 @@ async def collect_from_source(
 
     summary: JsonObject = {
         "schema": SUMMARY_SCHEMA,
-        "status": "ok",
+        "status": "error" if failures else "ok",
         "mode": mode,
-        "full_audit": selection.full_audit,
+        "full_audit": completed_full_audit,
         "catalog_count": len(catalog),
         "selected_count": len(selection.recordings),
         "pages_written": pages_written,
@@ -983,7 +1128,21 @@ async def collect_from_source(
         "preserved_notes": preserved_notes,
         "completed_at": observed_at,
     }
+    if failures:
+        summary.update(
+            {
+                "successful_count": len(hydrated),
+                "failure_count": len(failures),
+                "deferred_count": deferred_count,
+                "failure_classes": dict(sorted(failure_classes.items())),
+            }
+        )
     _atomic_json(paths.summary_path, summary)
+    if failures:
+        first_id, first_error = failures[0]
+        raise PlaudSourceError(
+            f"failed to hydrate {len(failures)} Plaud recording(s); first={first_id}: {type(first_error).__name__}"
+        ) from first_error
     return summary
 
 
@@ -1001,6 +1160,8 @@ async def run_pipeline_async(
     mode: str,
     recent_days: int,
     full_audit_hours: int,
+    max_recordings: int,
+    collection_timeout_seconds: float,
     now: datetime | None = None,
 ) -> JsonObject:
     harden_plaud_token_permissions()
@@ -1013,6 +1174,8 @@ async def run_pipeline_async(
             mode=mode,
             recent_days=recent_days,
             full_audit_hours=full_audit_hours,
+            max_recordings=max_recordings,
+            collection_timeout_seconds=collection_timeout_seconds,
             now=now,
         )
 
@@ -1039,6 +1202,8 @@ def _parser() -> argparse.ArgumentParser:
         child = subparsers.add_parser(command)
         child.add_argument("--days", type=int, default=30)
         child.add_argument("--full-audit-hours", type=int, default=24)
+        child.add_argument("--max-recordings", type=int, default=20)
+        child.add_argument("--collection-timeout-seconds", type=float, default=900)
         child.set_defaults(mode=command)
     return parser
 
@@ -1056,6 +1221,8 @@ def main() -> int:
                 mode=args.mode,
                 recent_days=args.days,
                 full_audit_hours=args.full_audit_hours,
+                max_recordings=args.max_recordings,
+                collection_timeout_seconds=args.collection_timeout_seconds,
             )
         )
     except (OSError, PlaudSourceError, ValueError) as exc:

@@ -8,6 +8,7 @@ import sys
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -19,7 +20,10 @@ import plaud_collector as plaud_module  # noqa: E402
 from plaud_collector import (  # noqa: E402
     CollectorPaths,
     PlaudMcpSource,
+    PlaudRateLimitError,
     PlaudSourceError,
+    PlaudSourceUnavailableError,
+    _is_rate_limit_error,
     _mcp_environment,
     _validate_data_link,
     collect_from_source,
@@ -329,6 +333,305 @@ def test_recent_selection_accepts_epoch_millisecond_timestamps() -> None:
     )
 
     assert {item["id"] for item in selection.recordings} == {RECORDING_A, RECORDING_B}
+
+
+def test_recent_selection_bounds_each_run_and_rotates_stale_audit_work() -> None:
+    catalog = [
+        catalog_item(
+            f"fixture-recording-{index:08d}",
+            created_at=(NOW - timedelta(days=1 if index < 15 else 90)).isoformat(),
+            name=f"Fixture recording {index}",
+        )
+        for index in range(30)
+    ]
+    old_check = (NOW - timedelta(hours=25)).isoformat()
+    state = {
+        "last_full_audit_at": old_check,
+        "files": {item["id"]: {"last_checked_at": old_check} for item in catalog},
+    }
+
+    first = select_recordings(
+        catalog,
+        state,
+        mode="recent",
+        recent_days=3,
+        full_audit_hours=24,
+        max_recordings=20,
+        now=NOW,
+    )
+
+    first_ids = {item["id"] for item in first.recordings}
+    recent_ids = {item["id"] for item in catalog[:15]}
+    assert len(first.recordings) == 20
+    assert recent_ids <= first_ids
+    assert first.full_audit is False
+
+    next_state = deepcopy(state)
+    for recording_id in first_ids:
+        next_state["files"][recording_id]["last_checked_at"] = NOW.isoformat()
+    second = select_recordings(
+        catalog,
+        next_state,
+        mode="recent",
+        recent_days=3,
+        full_audit_hours=24,
+        max_recordings=20,
+        now=NOW + timedelta(hours=1),
+    )
+
+    second_ids = {item["id"] for item in second.recordings}
+    assert len(second.recordings) == 20
+    assert recent_ids <= second_ids
+    assert (first_ids - recent_ids).isdisjoint(second_ids - recent_ids)
+
+
+def test_failed_recent_recordings_rotate_behind_unattempted_recent_work() -> None:
+    catalog = [
+        catalog_item(
+            f"fixture-recording-{index:08d}",
+            created_at=(NOW - timedelta(days=1)).isoformat(),
+            name=f"Recent fixture recording {index}",
+        )
+        for index in range(4)
+    ]
+    old_check = (NOW - timedelta(hours=2)).isoformat()
+    state = {
+        "last_full_audit_at": old_check,
+        "files": {item["id"]: {"last_checked_at": old_check} for item in catalog},
+    }
+
+    first = select_recordings(
+        catalog,
+        state,
+        mode="recent",
+        recent_days=3,
+        full_audit_hours=24,
+        max_recordings=2,
+        now=NOW,
+    )
+    first_ids = {item["id"] for item in first.recordings}
+    for recording_id in first_ids:
+        state["files"][recording_id]["last_failed_at"] = NOW.isoformat()
+
+    second = select_recordings(
+        catalog,
+        state,
+        mode="recent",
+        recent_days=3,
+        full_audit_hours=24,
+        max_recordings=2,
+        now=NOW + timedelta(hours=1),
+    )
+
+    assert first_ids.isdisjoint({item["id"] for item in second.recordings})
+
+
+def test_mcp_rate_limit_is_retried_without_exposing_response_text() -> None:
+    source = PlaudMcpSource(
+        "unused",
+        [],
+        rate_limit_retry_seconds=0,
+        max_attempts=2,
+    )
+    responses = [
+        SimpleNamespace(
+            isError=True,
+            content=[SimpleNamespace(text="Error: API error: 429 Too Many Requests")],
+        ),
+        SimpleNamespace(
+            isError=False,
+            content=[SimpleNamespace(text=json.dumps({"ok": True}))],
+        ),
+    ]
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def call_tool(self, name: str, arguments: dict) -> SimpleNamespace:
+            self.calls += 1
+            return responses.pop(0)
+
+    session = FakeSession()
+    source._session = session  # type: ignore[assignment]
+
+    assert asyncio.run(source._call_text("get_file", {"file_id": RECORDING_A})) == '{"ok": true}'
+    assert session.calls == 2
+
+
+def test_mcp_call_timeout_is_bounded_and_classified_as_source_unavailable() -> None:
+    source = PlaudMcpSource(
+        "unused",
+        [],
+        max_attempts=1,
+        call_timeout_seconds=0.01,
+    )
+
+    class HangingSession:
+        async def call_tool(self, name: str, arguments: dict) -> SimpleNamespace:
+            await asyncio.sleep(1)
+            return SimpleNamespace(isError=False, content=[SimpleNamespace(text="never reached")])
+
+    source._session = HangingSession()  # type: ignore[assignment]
+
+    with pytest.raises(PlaudSourceUnavailableError):
+        asyncio.run(source._call_text("get_file", {"file_id": RECORDING_A}))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Error: API error: 429 Too Many Requests",
+        "HTTP 429 rate limit exceeded",
+        "RESOURCE_EXHAUSTED: upstream quota throttled",
+    ],
+)
+def test_rate_limit_detection_accepts_supported_upstream_shapes(text: str) -> None:
+    assert _is_rate_limit_error(text)
+
+
+def test_failed_collection_short_circuits_global_rate_limit_and_persists_failure_class(
+    tmp_path: Path,
+) -> None:
+    source = fixture_source()
+    calls = 0
+
+    async def rate_limited(_recording_id: str) -> dict:
+        nonlocal calls
+        calls += 1
+        raise PlaudRateLimitError("synthetic rate limit")
+
+    source.get_file = rate_limited  # type: ignore[method-assign]
+
+    with pytest.raises(PlaudSourceError):
+        run(source, tmp_path, mode="backfill", now=NOW)
+
+    summary = json.loads(CollectorPaths.from_root(tmp_path).summary_path.read_text(encoding="utf-8"))
+    assert summary["status"] == "error"
+    assert summary["failure_count"] == 1
+    assert summary["deferred_count"] == 1
+    assert summary["failure_classes"] == {"rate_limited": 1}
+    assert calls == 1
+
+
+def test_partial_failure_commits_success_and_rotates_failed_recording_behind_unattempted_work(
+    tmp_path: Path,
+) -> None:
+    source = fixture_source()
+    old = "2025-02-01T12:00:00Z"
+    source.catalog.append(catalog_item(RECORDING_C, created_at=old, name="Third fixture meeting"))
+    source.details[RECORDING_C] = file_detail(
+        RECORDING_C,
+        created_at=old,
+        name="Third fixture meeting",
+        with_notes=False,
+    )
+    source.transcripts[RECORDING_C] = None
+    paths = CollectorPaths.from_root(tmp_path)
+    paths.root.mkdir(parents=True, exist_ok=True)
+    old_check = (NOW - timedelta(hours=25)).isoformat()
+    paths.state_path.write_text(
+        json.dumps(
+            {
+                "schema": "gbrain-ops-plaud-state/v1",
+                "last_full_audit_at": old_check,
+                "last_success_at": old_check,
+                "files": {
+                    item["id"]: {"last_checked_at": old_check}
+                    for item in source.catalog
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    original_get_file = source.get_file
+
+    async def fail_one(recording_id: str) -> dict:
+        if recording_id == RECORDING_B:
+            raise PlaudSourceError("synthetic source failure")
+        return await original_get_file(recording_id)
+
+    source.get_file = fail_one  # type: ignore[method-assign]
+
+    with pytest.raises(PlaudSourceError):
+        asyncio.run(
+            collect_from_source(
+                source,
+                root=tmp_path,
+                mode="recent",
+                recent_days=3,
+                full_audit_hours=24,
+                max_recordings=2,
+                now=NOW,
+            )
+        )
+
+    partial_state = json.loads(paths.state_path.read_text(encoding="utf-8"))
+    assert partial_state["files"][RECORDING_A]["last_checked_at"] == "2026-08-03T18:00:00Z"
+    assert partial_state["files"][RECORDING_B]["last_failure_class"] == "source_error"
+    assert partial_state["files"][RECORDING_C]["last_checked_at"] == old_check
+    assert partial_state["last_success_at"] == old_check
+
+    next_selection = select_recordings(
+        source.catalog,
+        partial_state,
+        mode="recent",
+        recent_days=3,
+        full_audit_hours=24,
+        max_recordings=2,
+        now=NOW + timedelta(hours=1),
+    )
+    assert [item["id"] for item in next_selection.recordings] == [RECORDING_A, RECORDING_C]
+
+
+def test_collection_budget_commits_completed_recordings_before_returning_error(tmp_path: Path) -> None:
+    source = fixture_source()
+    paths = CollectorPaths.from_root(tmp_path)
+    paths.root.mkdir(parents=True, exist_ok=True)
+    old_check = (NOW - timedelta(hours=25)).isoformat()
+    paths.state_path.write_text(
+        json.dumps(
+            {
+                "schema": "gbrain-ops-plaud-state/v1",
+                "last_full_audit_at": old_check,
+                "last_success_at": old_check,
+                "files": {
+                    item["id"]: {"last_checked_at": old_check}
+                    for item in source.catalog
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    original_get_file = source.get_file
+
+    async def hang_on_old_recording(recording_id: str) -> dict:
+        if recording_id == RECORDING_B:
+            await asyncio.sleep(1)
+        return await original_get_file(recording_id)
+
+    source.get_file = hang_on_old_recording  # type: ignore[method-assign]
+
+    with pytest.raises(PlaudSourceError):
+        asyncio.run(
+            collect_from_source(
+                source,
+                root=tmp_path,
+                mode="recent",
+                recent_days=3,
+                full_audit_hours=24,
+                max_recordings=2,
+                collection_timeout_seconds=0.05,
+                now=NOW,
+            )
+        )
+
+    partial_state = json.loads(paths.state_path.read_text(encoding="utf-8"))
+    summary = json.loads(paths.summary_path.read_text(encoding="utf-8"))
+    assert partial_state["files"][RECORDING_A]["last_checked_at"] == "2026-08-03T18:00:00Z"
+    assert partial_state["files"][RECORDING_B]["last_failure_class"] == "source_unavailable"
+    assert summary["successful_count"] == 1
+    assert summary["failure_classes"] == {"source_unavailable": 1}
 
 
 def test_transcript_and_catalog_pagination_are_complete() -> None:

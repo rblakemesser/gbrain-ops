@@ -112,6 +112,15 @@ def normalize_account_slug(email: str) -> str:
     return re.sub(r'[^a-z0-9]+', '-', email.lower()).strip('-')
 
 
+def render_one_line(value: object) -> str:
+    """Normalize source text for one-line Markdown without mutating raw records."""
+
+    text = str(value or '').replace('\x00', '')
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    text = text.replace('\u2028', '\n').replace('\u2029', '\n')
+    return ' '.join(text.split())
+
+
 def classify_noise(sender: str, subject: str) -> bool:
     hay = f'{sender} {subject}'.lower()
     return any(p in hay for p in NOISE_PATTERNS)
@@ -247,6 +256,9 @@ def render_day_page(day: str, account_email: str, records: list[dict]) -> str:
         lines.extend([f'## {heading}', ''])
         for r in items:
             ts = r['timestamp_utc'][11:16]
+            sender = render_one_line(r['from']) or '(unknown)'
+            subject = render_one_line(r['subject'])
+            snippet = render_one_line(r['snippet'])
             flags = []
             if r['is_unread']:
                 flags.append('unread')
@@ -255,10 +267,10 @@ def render_day_page(day: str, account_email: str, records: list[dict]) -> str:
             if r['is_important']:
                 flags.append('important')
             flag_txt = f" ({', '.join(flags)})" if flags else ''
-            lines.append(f"- {ts} | From: {r['from'] or '(unknown)'}{flag_txt}")
-            lines.append(f"  - Subject: {r['subject']}")
-            if r['snippet']:
-                lines.append(f"  - Snippet: {r['snippet']}")
+            lines.append(f"- {ts} | From: {sender}{flag_txt}")
+            lines.append(f"  - Subject: {subject}")
+            if snippet:
+                lines.append(f"  - Snippet: {snippet}")
             lines.append(f"  - [Open in Gmail]({r['gmail_link']})")
             lines.append(f"  - Labels: {', '.join(r['labelIds']) if r['labelIds'] else '(none)'}")
             lines.append('')
@@ -297,8 +309,11 @@ def write_digest(account_email: str, records: list[dict], label: str) -> Path:
             lines.extend(['(none)', ''])
             continue
         for r in items:
-            lines.append(f"- {r['day']} {r['timestamp_utc'][11:16]} | {r['from'] or '(unknown)'} | {r['subject']}")
-            lines.append(f"  - {r['snippet']}")
+            sender = render_one_line(r['from']) or '(unknown)'
+            subject = render_one_line(r['subject'])
+            snippet = render_one_line(r['snippet'])
+            lines.append(f"- {r['day']} {r['timestamp_utc'][11:16]} | {sender} | {subject}")
+            lines.append(f"  - {snippet}")
             lines.append(f"  - [Open in Gmail]({r['gmail_link']})")
         lines.append('')
     atomic_write_text(path, '\n'.join(lines).rstrip() + '\n')
