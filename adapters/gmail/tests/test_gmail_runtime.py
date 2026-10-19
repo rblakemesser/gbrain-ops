@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import sys
 from copy import deepcopy
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -89,3 +91,74 @@ def test_recent_wrapper_avoids_full_archive_classification_and_promotion() -> No
     assert wrapper.count("reconcile_archive.py") == 1
     assert "--glob 'email/**/*.md'" in wrapper
     assert "--dated-within-days" in wrapper
+
+
+class _FakeList:
+    def __init__(self, calls: list[dict]) -> None:
+        self.calls = calls
+
+    def list(self, **kwargs):
+        self.calls.append(kwargs)
+        return self
+
+    def execute(self) -> dict:
+        return {"messages": [{"id": "fixture-message-1"}, {"id": "fixture-spam-1"}]}
+
+
+class _FakeService:
+    def __init__(self, calls: list[dict]) -> None:
+        self._messages = _FakeList(calls)
+
+    def users(self):
+        return self
+
+    def messages(self):
+        return self._messages
+
+
+def spam_record() -> dict:
+    record = fixture_record()
+    record.update(id="fixture-spam-1", labelIds=["SPAM", "UNREAD"])
+    return record
+
+
+def test_gmail_listing_excludes_spam_and_trash() -> None:
+    calls: list[dict] = []
+
+    email_module.list_message_ids_for_range(_FakeService(calls), date(2026, 8, 18), date(2026, 8, 19))
+
+    assert calls[0]["includeSpamTrash"] is False
+    assert "-in:spam" in calls[0]["q"]
+    assert "-in:trash" in calls[0]["q"]
+    assert "in:anywhere" not in calls[0]["q"]
+
+
+def test_spam_or_trash_records_never_reach_raw_pages_or_digests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(email_module, "gmail_profile", lambda: {"emailAddress": OWNER_EMAIL})
+    monkeypatch.setattr(email_module, "gmail_service", lambda: _FakeService([]))
+    monkeypatch.setattr(
+        email_module,
+        "extract_message",
+        lambda _service, msg_id, _account: spam_record() if msg_id == "fixture-spam-1" else fixture_record(),
+    )
+
+    result = email_module.fetch_range(date(2026, 8, 18), date(2026, 8, 19))
+    assert [r["id"] for r in result.records] == ["fixture-message-1"]
+
+    trashed = fixture_record()
+    trashed.update(id="fixture-trash-1", labelIds=["TRASH"])
+    raw_path = tmp_path / "messages.json"
+    raw_path.write_text(json.dumps([spam_record(), trashed]), encoding="utf-8")
+    merged = merge_raw_records(raw_path, [fixture_record()])
+    assert [r["id"] for r in merged] == ["fixture-message-1"]
+    assert [r["id"] for r in json.loads(raw_path.read_text(encoding="utf-8"))] == ["fixture-message-1"]
+
+    monkeypatch.setattr(email_module, "BRAIN_DIR", tmp_path / "brain")
+    pages = email_module.write_pages(OWNER_EMAIL, [fixture_record(), spam_record(), trashed])
+    page = pages[0].read_text(encoding="utf-8")
+    assert "Total messages: 1" in page
+    assert "fixture-spam-1" not in page
+    assert "fixture-trash-1" not in page

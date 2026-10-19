@@ -9,6 +9,8 @@ from email.utils import parseaddr
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+from email_collector import is_excluded
+
 ROOT = Path(os.environ.get('GBRAIN_OPS_GMAIL_ROOT', Path.home() / '.local/share/gbrain-ops/gmail')).expanduser()
 MESSAGES_DIR = ROOT / 'data' / 'messages'
 PROMOTED_DIR = ROOT / 'brain' / 'promoted'
@@ -64,7 +66,7 @@ def parse_ts(ts: str) -> datetime:
 def load_monthly_records() -> list[dict]:
     rows = []
     for path in sorted(MESSAGES_DIR.glob('????-??.json')):
-        rows.extend(json.loads(path.read_text()))
+        rows.extend(r for r in json.loads(path.read_text()) if not is_excluded(r))
     rows.sort(key=lambda r: (r.get('timestamp_utc', ''), r.get('id', '')))
     return rows
 
