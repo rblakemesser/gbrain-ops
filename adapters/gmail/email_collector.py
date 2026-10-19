@@ -34,6 +34,9 @@ NOISE_PATTERNS = [
     'noreply', 'no-reply', 'notifications@', 'calendar-notification',
     'mailer-daemon', 'postmaster', 'donotreply', 'newsletter', 'unsubscribe',
 ]
+# Gmail spam and trash never enter the archive: spam is the main carrier for
+# prompt-injection text aimed at agents that search the brain.
+EXCLUDED_LABELS = frozenset({'SPAM', 'TRASH'})
 SIGNATURE_PATTERNS = [
     'docusign', 'dropbox sign', 'hellosign', 'pandadoc',
     'please sign', 'signature needed', 'ready for your signature',
@@ -122,6 +125,10 @@ def render_one_line(value: object) -> str:
     return ' '.join(text.split())
 
 
+def is_excluded(record: dict) -> bool:
+    return bool(EXCLUDED_LABELS.intersection(record.get('labelIds') or []))
+
+
 def classify_noise(sender: str, subject: str) -> bool:
     hay = f'{sender} {subject}'.lower()
     return any(p in hay for p in NOISE_PATTERNS)
@@ -173,14 +180,14 @@ def extract_message(service, msg_id: str, account_email: str) -> dict:
 
 
 def list_message_ids_for_range(service, start_day: date, end_day: date) -> list[str]:
-    query = f'in:anywhere after:{start_day.isoformat()} before:{end_day.isoformat()}'
+    query = f'after:{start_day.isoformat()} before:{end_day.isoformat()} -in:spam -in:trash'
     ids: list[str] = []
     page_token = None
     while True:
         resp = service.users().messages().list(
             userId='me',
             q=query,
-            includeSpamTrash=True,
+            includeSpamTrash=False,
             maxResults=500,
             pageToken=page_token,
         ).execute()
@@ -204,7 +211,9 @@ def fetch_range(start_day: date, end_day: date, workers: int = 1) -> FetchResult
         futures = {pool.submit(extract_message, service, msg_id, account_email): msg_id for msg_id in msg_ids}
         done = 0
         for fut in as_completed(futures):
-            records.append(fut.result())
+            record = fut.result()
+            if not is_excluded(record):
+                records.append(record)
             done += 1
             if done % 100 == 0 or done == len(msg_ids):
                 print(f'  fetched {done}/{len(msg_ids)} metadata records')
@@ -222,7 +231,7 @@ def merge_raw_records(path: Path, new_records: list[dict]) -> list[dict]:
     merged = {r['id']: r for r in existing}
     for r in new_records:
         merged[r['id']] = r
-    out = list(merged.values())
+    out = [r for r in merged.values() if not is_excluded(r)]
     out.sort(key=lambda r: (r['timestamp_utc'], r['id']))
     atomic_write_json(path, out)
     return out
@@ -281,7 +290,8 @@ def render_day_page(day: str, account_email: str, records: list[dict]) -> str:
 def write_pages(account_email: str, records: list[dict]) -> list[Path]:
     by_day: dict[str, list[dict]] = defaultdict(list)
     for r in records:
-        by_day[r['day']].append(r)
+        if not is_excluded(r):
+            by_day[r['day']].append(r)
     written = []
     acct = normalize_account_slug(account_email)
     for day, day_records in by_day.items():
