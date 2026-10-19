@@ -20,7 +20,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Install a launchd service for the sole local GBrain owner")
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--bun", type=Path, required=True)
-    parser.add_argument("--gbrain-home", type=Path, required=True)
+    parser.add_argument(
+        "--gbrain-home",
+        type=Path,
+        required=True,
+        help="GBrain config directory containing config.json (for example ~/.gbrain), not the user home",
+    )
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--port", type=int, default=3131)
     parser.add_argument("--label", default="com.gbrain.owner")
@@ -43,6 +48,11 @@ def main() -> int:
     stderr = args.stderr.expanduser().resolve()
     if not (runtime / "src" / "cli.ts").is_file() or not bun.is_file() or not env_file.is_file():
         raise SystemExit("owner runtime, bun, or environment file is missing")
+    # The launcher exports GBRAIN_HOME as this directory's parent. Passing the
+    # user home instead hides config.json, and the owner silently falls back to
+    # an unconfigured default embedding provider.
+    if not (home / "config.json").is_file():
+        raise SystemExit(f"--gbrain-home must be the GBrain config directory containing config.json: {home}")
 
     stdout.parent.mkdir(parents=True, exist_ok=True)
     stderr.parent.mkdir(parents=True, exist_ok=True)
