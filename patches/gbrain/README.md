@@ -23,6 +23,8 @@ The manifest pins a public upstream revision and applies patches with `git am --
    - Adds source allowlists so scoped credentials can read only explicitly granted archives.
 6. `0006-fix-ingestion-integrate-upstream-http-lifecycle.patch`
    - Preserves upstream's connection-draining HTTP lifecycle while starting and stopping the carried ingestion service in the same owner process.
+7. `0007-fix-ingestion-log-owner-embedding-failures.patch`
+   - Logs owner embedding failures, which the retry loop previously swallowed. It warns when a failure streak starts and at most hourly while it lasts, names the model signature and error class but never the error message, and logs recovery.
 
 ## Verification
 

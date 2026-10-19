@@ -1,0 +1,261 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: GBrain Ops <person@example.test>
+Date: Mon, 19 Oct 2026 17:09:08 -0500
+Subject: [PATCH] fix(ingestion): log owner embedding failures
+
+The owner's embedding loop caught every pass failure, recorded a generic
+health string, and retried with backoff without logging. A
+misconfigured embedding provider therefore stopped all embedding with
+nothing in the owner logs.
+
+Warn when a failure streak starts and at most hourly while it lasts.
+Name the model signature and the error class plus structured
+credential-preflight fields, never the error message, which can carry
+provider responses or page content. A stale remainder warns only after
+it survives several retries, since writes landing mid-pass routinely
+leave a short-lived one. Log recovery once the streak ends.
+---
+ src/core/ingestion/service.ts  | 61 +++++++++++++++++++++-
+ test/ingestion/service.test.ts | 92 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 151 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/ingestion/service.ts b/src/core/ingestion/service.ts
+index eb5a7fd61..bb015f298 100644
+--- a/src/core/ingestion/service.ts
++++ b/src/core/ingestion/service.ts
+@@ -53,6 +53,7 @@ interface ServiceDependencies {
+   embed: (engine: BrainEngine, signal: AbortSignal) => Promise<void>;
+   signature: () => string;
+   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
++  now: () => number;
+ }
+ 
+ export interface IngestionServiceOpts {
+@@ -77,6 +78,12 @@ const BUILTIN_COMMAND_ARCHIVE: LoadedIngestionSource = {
+ 
+ const INITIAL_EMBED_RETRY_MS = 1_000;
+ const MAX_EMBED_RETRY_MS = 60_000;
++// A failing pass retries forever with backoff, so its log line is rate
++// limited: once when the failure streak starts, then at most hourly.
++const EMBED_FAILURE_LOG_REPEAT_MS = 60 * 60_000;
++// Writes that land during a pass routinely leave a short-lived remainder;
++// only a remainder that survives several retries is worth a warning.
++const EMBED_REMAINDER_WARN_AFTER_RETRIES = 5;
+ 
+ export class IngestionService {
+   private readonly deps: ServiceDependencies;
+@@ -95,6 +102,7 @@ export class IngestionService {
+   private embeddingRetries = 0;
+   private remainingChunks: number | null = null;
+   private lastEmbeddingError: string | null = null;
++  private embeddingFailureLoggedAt: number | null = null;
+   private embeddingAbort = new AbortController();
+   private embeddingLoop: Promise<void> | null = null;
+ 
+@@ -112,6 +120,7 @@ export class IngestionService {
+       },
+       signature: currentEmbeddingSignature,
+       sleep: abortableSleep,
++      now: Date.now,
+       ...(opts._deps ?? {}),
+     };
+   }
+@@ -308,16 +317,26 @@ export class IngestionService {
+         if (this.remainingChunks > 0) {
+           this.embeddingRetries++;
+           this.lastEmbeddingError = 'embedding work remains';
++          if (this.embeddingRetries >= EMBED_REMAINDER_WARN_AFTER_RETRIES) {
++            this.reportEmbeddingFailure(`left ${this.remainingChunks} chunk(s) stale`);
++          }
+           await this.waitForEmbeddingRetry();
+           this.embeddingRequested = true;
+         } else {
++          if (this.embeddingFailureLoggedAt !== null) {
++            this.opts.logger.info(
++              `[ingestion] embedding recovered after ${this.embeddingRetries} failed pass(es)`,
++            );
++          }
+           this.embeddingRetries = 0;
+           this.lastEmbeddingError = null;
++          this.embeddingFailureLoggedAt = null;
+         }
+-      } catch {
++      } catch (error) {
+         if (this.embeddingAbort.signal.aborted) break;
+         this.embeddingRetries++;
+         this.lastEmbeddingError = 'embedding pass failed';
++        this.reportEmbeddingFailure(`pass failed (${describeEmbeddingError(error)})`);
+         await this.waitForEmbeddingRetry();
+         this.embeddingRequested = true;
+       } finally {
+@@ -326,6 +345,21 @@ export class IngestionService {
+     }
+   }
+ 
++  private reportEmbeddingFailure(detail: string): void {
++    const now = this.deps.now();
++    if (
++      this.embeddingFailureLoggedAt !== null
++      && now - this.embeddingFailureLoggedAt < EMBED_FAILURE_LOG_REPEAT_MS
++    ) {
++      return;
++    }
++    this.embeddingFailureLoggedAt = now;
++    this.opts.logger.warn(
++      `[ingestion] embedding ${detail} for ${this.deps.signature()}; `
++      + `${this.embeddingRetries} failed pass(es), retrying with backoff`,
++    );
++  }
++
+   private async waitForEmbeddingRetry(): Promise<void> {
+     const delay = Math.min(
+       INITIAL_EMBED_RETRY_MS * 2 ** Math.max(0, this.embeddingRetries - 1),
+@@ -406,4 +440,27 @@ function rejectOnAbort(signal: AbortSignal, message: string): {
+   };
+ }
+ 
+-export const __testing = { mapPersistenceResult, BUILTIN_COMMAND_ARCHIVE };
++/**
++ * Name an embedding failure without its message text, which can carry
++ * provider responses or page content. Credential preflight errors expose
++ * their structured reason and the missing env var names.
++ */
++function describeEmbeddingError(error: unknown): string {
++  if (!(error instanceof Error)) return 'non-Error thrown';
++  const parts = [/^[A-Za-z0-9_]{1,64}$/.test(error.name) ? error.name : 'Error'];
++  const diagnosis = (error as { diagnosis?: unknown }).diagnosis;
++  if (diagnosis && typeof diagnosis === 'object') {
++    const { reason, missingEnvVars } = diagnosis as { reason?: unknown; missingEnvVars?: unknown };
++    if (typeof reason === 'string' && /^[a-z_]{1,64}$/.test(reason)) parts.push(reason);
++    if (Array.isArray(missingEnvVars)) {
++      parts.push(...missingEnvVars.filter(
++        (name): name is string => typeof name === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(name),
++      ));
++    }
++  }
++  const code = (error as { code?: unknown }).code;
++  if (typeof code === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(code)) parts.push(`code=${code}`);
++  return parts.join(' ');
++}
++
++export const __testing = { mapPersistenceResult, describeEmbeddingError, BUILTIN_COMMAND_ARCHIVE };
+diff --git a/test/ingestion/service.test.ts b/test/ingestion/service.test.ts
+index efca35781..75272ba92 100644
+--- a/test/ingestion/service.test.ts
++++ b/test/ingestion/service.test.ts
+@@ -97,6 +97,7 @@ function harness(opts: {
+   embed?: (engine: BrainEngine, signal: AbortSignal) => Promise<void>;
+   stale?: () => number | Promise<number>;
+   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
++  now?: () => number;
+   shutdownGraceMs?: number;
+ }) {
+   let connectCalls = 0;
+@@ -120,6 +121,7 @@ function harness(opts: {
+       embed: opts.embed ?? (async () => {}),
+       signature: () => 'test-model:3',
+       sleep: opts.sleep ?? (async () => {}),
++      now: opts.now ?? (() => 0),
+     },
+   });
+   return {
+@@ -239,6 +241,96 @@ describe('IngestionService owner-local composition', () => {
+     await fx.service.stop();
+   });
+ 
++  test('logs an embedding failure streak once without exception text and reports recovery', async () => {
++    const capture = captureLogger();
++    const secret = 'sk-do-not-log chunk body';
++    let embedCalls = 0;
++    const fx = harness({
++      logger: capture.logger,
++      embed: async () => {
++        embedCalls++;
++        if (embedCalls <= 3) {
++          throw Object.assign(new Error(secret), {
++            name: 'EmbeddingCredentialError',
++            diagnosis: { ok: false, reason: 'missing_env', missingEnvVars: ['ZEROENTROPY_API_KEY'] },
++          });
++        }
++      },
++    });
++
++    await fx.service.start();
++    await waitFor(() => capture.messages.some((message) => message.includes('recovered')));
++    const output = capture.messages.join('\n');
++    const failures = capture.messages.filter((message) => message.includes('embedding pass failed'));
++    expect(failures).toEqual([
++      '[ingestion] embedding pass failed (EmbeddingCredentialError missing_env ZEROENTROPY_API_KEY) '
++        + 'for test-model:3; 1 failed pass(es), retrying with backoff',
++    ]);
++    expect(output).toContain('[ingestion] embedding recovered after 3 failed pass(es)');
++    expect(output).not.toContain(secret);
++    expect((await fx.service.healthCheck()).last_embedding_error).toBeNull();
++    await fx.service.stop();
++  });
++
++  test('repeats a persistent embedding failure at most hourly', async () => {
++    const capture = captureLogger();
++    let clock = 0;
++    let embedCalls = 0;
++    const fx = harness({
++      logger: capture.logger,
++      now: () => clock,
++      sleep: async () => { clock += 10 * 60_000; },
++      embed: async (_engine, signal) => {
++        embedCalls++;
++        if (embedCalls > 13) {
++          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()));
++        }
++        throw new TypeError('fetch failed');
++      },
++    });
++
++    await fx.service.start();
++    await waitFor(() => embedCalls > 13);
++    await fx.service.stop();
++    const failures = capture.messages.filter((message) => message.includes('embedding pass failed'));
++    expect(failures.map((message) => message.match(/; (\d+) failed/)?.[1])).toEqual(['1', '7', '13']);
++    expect(failures[0]).toContain('(TypeError)');
++  });
++
++  test('warns about a stale remainder only after it survives several retries', async () => {
++    const transient = captureLogger();
++    const stale = [1, 0];
++    const fx = harness({ logger: transient.logger, stale: () => stale.shift() ?? 0 });
++    await fx.service.start();
++    await waitFor(async () => (await fx.service.healthCheck()).embedding.remaining_chunks === 0);
++    await fx.service.stop();
++    expect(transient.messages.join('\n')).not.toContain('[ingestion] embedding');
++
++    const persistent = captureLogger();
++    let passes = 0;
++    const stuck = harness({
++      logger: persistent.logger,
++      embed: async () => { passes++; },
++      stale: () => 4,
++      sleep: () => Bun.sleep(0),
++    });
++    await stuck.service.start();
++    await waitFor(() => passes >= 8);
++    await stuck.service.stop();
++    expect(persistent.messages.filter((message) => message.includes('[ingestion] embedding'))).toEqual([
++      '[ingestion] embedding left 4 chunk(s) stale for test-model:3; 5 failed pass(es), retrying with backoff',
++    ]);
++  });
++
++  test('describes embedding errors without their message text', () => {
++    const { describeEmbeddingError } = __testing;
++    expect(describeEmbeddingError(Object.assign(new Error('secret'), { code: 'ECONNREFUSED' })))
++      .toBe('Error code=ECONNREFUSED');
++    expect(describeEmbeddingError(Object.assign(new Error('secret'), { name: 'bad name with secret' })))
++      .toBe('Error');
++    expect(describeEmbeddingError('secret')).toBe('non-Error thrown');
++  });
++
+   test('burst acknowledgments coalesce embedding and health reports pending state', async () => {
+     const outcomes: IngestionEmitOutcome[] = [];
+     let embedCalls = 0;
+-- 
+2.54.0 (Apple Git-157)
+

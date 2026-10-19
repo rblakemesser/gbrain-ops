@@ -9,6 +9,7 @@
     "0003-feat-ingestion-acknowledge-persisted-http-writes-in-owner.patch",
     "0004-feat-auth-scope-legacy-bearer-tokens.patch",
     "0005-feat-auth-grant-legacy-bearer-source-allowlists.patch",
-    "0006-fix-ingestion-integrate-upstream-http-lifecycle.patch"
+    "0006-fix-ingestion-integrate-upstream-http-lifecycle.patch",
+    "0007-fix-ingestion-log-owner-embedding-failures.patch"
   ]
 }
